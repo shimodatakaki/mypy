@@ -41,7 +41,7 @@ Examples
 
 ![System_Identification_from_10_Hz_to_500_Hz](images/System_Identification_from_10_Hz_to_500_Hz.jpg)
 
-* Trajectory Planning: B-spline trajectory of jerk infinity-norm minimization with constraints
+* Trajectory Planning: B-spline trajectory of jerk 2/infinity-norm minimization with constraints (Red: infinity-norm minimization, Blue: 2-norm minimization)
 
 ![po](images/Position.png)
 ![vel](images/Velocity.png)
