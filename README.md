@@ -1,10 +1,10 @@
-**mypy**
+**mypy**: An Useful Toolbox for Control Engineers 
 ======
 
 Overview
 ========
 
-**mypy** is a useful toolbox for control engineers.
+**mypy** is an useful toolbox for control engineers.
 It can be used for a wide range of purposes: to identify a system transfer functions, to optimize a trajectory plan, ..., and so on.
 
 Requirements
