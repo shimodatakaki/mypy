@@ -1,15 +1,25 @@
+"""
+Plot tools
+"""
+import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
-import numpy as np
 from scipy.fftpack import fft
 
 
-def save(leg, save_name, is_show, text=None, formats=('jpg', "pdf")):
+def show():
+    """
+    show all of figures
+    :return:
+    """
+    plt.show()
+
+
+def save(leg, save_name, text=None, formats=('jpg', "pdf")):
     """
     save figure to file if leg and save_name given
     :param leg:
     :param save_name:
-    :param is_show:
     :param text:
     :return:
     """
@@ -20,11 +30,27 @@ def save(leg, save_name, is_show, text=None, formats=('jpg', "pdf")):
     if save_name:
         for f in formats:
             plt.savefig(save_name + "." + f)
-    if is_show:
-        plt.draw()
 
 
-def bode(sys, fig_num, w=np.array([]), save_name=None, leg=None, is_show=True):
+def phase_bind(phase):
+    """
+    limit phase to -180-180 degrees
+    :param phase:
+    :return:
+    """
+    ret = []
+    MAX, MIN = 180, -180
+    EQ = 360
+    for d in phase:
+        while d > MAX:
+            d -= EQ
+        while d < MIN:
+            d += EQ
+        ret.append(d)
+    return ret
+
+
+def bode(sys, fig_num, w=np.array([]), save_name=None, leg=None):
     """
     plot bode diagram
     :param sys:
@@ -32,27 +58,27 @@ def bode(sys, fig_num, w=np.array([]), save_name=None, leg=None, is_show=True):
     :param w:
     :param save_name:
     :param leg:
-    :param is_show:
     :return:
     """
     if not w.any():
         w, mag, phase = signal.bode(sys)
     else:
         w, mag, phase = signal.bode(sys, w=w, n=len(w))
+    phase = phase_bind(phase)
     plt.figure(fig_num)
     plt.subplot(211)
     plt.semilogx(w / 2 / np.pi, mag)
     plt.ylabel("Gain [dB]")
-    plt.axis('tight')
+    # plt.axis('tight')
     plt.subplot(212)
     plt.semilogx(w / 2 / np.pi, phase)
     plt.ylabel("Phase [deg]")
     plt.xlabel("Frequency [Hz]")
     plt.axis('tight')
-    save(leg, save_name, is_show)
+    save(leg, save_name)
 
 
-def time(t, x, fig_num, text=None, label=("time [s]", "x []"), save_name=None, leg=None, is_show=True):
+def time(t, x, fig_num, text=None, label=("time [s]", "x []"), save_name=None, leg=None):
     """
     plot time scale
     :param t:
@@ -62,7 +88,6 @@ def time(t, x, fig_num, text=None, label=("time [s]", "x []"), save_name=None, l
     :param label:
     :param save_name:
     :param leg:
-    :param is_show:
     :return:
     """
     plt.figure(fig_num)
@@ -70,10 +95,18 @@ def time(t, x, fig_num, text=None, label=("time [s]", "x []"), save_name=None, l
     plt.axis('tight')
     plt.xlabel(label[0])
     plt.ylabel(label[1])
-    save(leg, save_name, is_show, text=text)
+    save(leg, save_name, text=text)
 
 
 def scale_fft(xf, fs, N=None, yaxis="dB"):
+    """
+    calculate amplitude and phase of FFT result
+    :param xf: fft(x) where x = x(t)
+    :param fs: sampling frequency
+    :param N: N = len(xf)
+    :param yaxis: absolute or dB
+    :return: frequency (Hz), gain, phase (degree)
+    """
     if N is None:
         N = len(xf)
     if yaxis.lower() == "db":
@@ -85,22 +118,35 @@ def scale_fft(xf, fs, N=None, yaxis="dB"):
     return freq, gain, phi
 
 
-def bodeplot(freq, gain, phi, fig_num, line_style='b+', text=None, save_name=None, leg=None, is_show=True, nos=2):
+def bodeplot(freq, gain, phi, fig_num, line_style='b+', nos=2, yaxis="dB", text=None, save_name=None, leg=None):
+    """
+    plot bode plot, given frequency, gain, and phase
+    :param freq:
+    :param gain:
+    :param phi:
+    :param fig_num:
+    :param line_style:
+    :param text:
+    :param save_name:
+    :param leg:
+    :param nos:
+    :return:
+    """
     plt.figure(fig_num)
     plt.subplot(211)
     plt.semilogx(freq, gain, line_style)
     # plt.xlim(min(self.f_lines), max(freq))
-    plt.ylabel("Gain [dB]")
+    plt.ylabel("Gain [" + yaxis + "]")
     if nos > 1:
         plt.subplot(212)
         plt.semilogx(freq, phi, line_style)
         # plt.xlim(min(self.f_lines), max(freq))
         plt.xlabel("Frequency [Hz]")
         plt.ylabel("Phase [deg]")
-    save(leg, save_name, is_show, text=text)
+    save(leg, save_name, text=text)
 
 
-def FFT(x, fs, fig_num, text=None, save_name=None, leg=None, is_show=True):
+def FFT(x, fs, fig_num, text=None, save_name=None, leg=None):
     """
     plot FFT results of signal
     :param x:
@@ -109,9 +155,8 @@ def FFT(x, fs, fig_num, text=None, save_name=None, leg=None, is_show=True):
     :param text:
     :param save_name:
     :param leg:
-    :param is_show:
     :return:
     """
     xf = fft(x)
     freq, gain, phi = scale_fft(xf, fs)
-    bodeplot(freq, gain, phi, fig_num, text=None, save_name=None, leg=None, is_show=True)
+    bodeplot(freq, gain, phi, fig_num, text=text, save_name=save_name, leg=leg)

@@ -1,3 +1,6 @@
+"""
+read/write CSV files
+"""
 import csv
 import numpy as np
 

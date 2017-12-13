@@ -89,9 +89,10 @@ def system_identification(fig, plant):
 
     fig += 1
     freq, gain, phi = sys_id.fap_data()
-    myplot.bodeplot(freq, gain, phi, fig, line_style = 'b-')
+    myplot.bodeplot(freq, gain, phi, fig, line_style='b-')
     freq, gain, phi = sys_id.fap_data("noise")
-    myplot.bodeplot(freq, gain, phi, fig, line_style = 'r+', nos=1)
+    myplot.bodeplot(freq, gain, phi, fig, line_style='r+', nos=1, save_name=DATA_PATH + "bode_result",
+                    leg=("Signal", "Estimated_Noise"))
 
     print("f_lines:")
     print(sys_id.f_lines)
@@ -115,14 +116,22 @@ def system_identification(fig, plant):
     P_nls = theta_to_tf(n_den, theta_nls)
     P_mle = theta_to_tf(n_den, theta_mle)
 
+    fig += 1
+    freq, gain, phi = sys_id.fap_data()
+    myplot.bodeplot(freq, gain, phi, fig, line_style='b-')
     myplot.bode(P_true, fig, w=sys_id.o_lines)
     myplot.bode(P_lls, fig, w=sys_id.o_lines)
     myplot.bode(P_iwls, fig, w=sys_id.o_lines)
     myplot.bode(P_nls, fig, w=sys_id.o_lines)
-    myplot.bode(P_mle, fig, w=sys_id.o_lines,
-                save_name=DATA_PATH + "System_Identification_from_"
-                          + str(min(F_RANGE[0])) + "_Hz_to_" + str(max(F_RANGE[1])) + "_Hz",
-                leg=("Signal", "Noise", "P_true", "P_lls", "P_iwls", "P_nls", "P_mle"))
+    myplot.bode(P_mle, fig, w=sys_id.o_lines)
+    freq, gain, phi = sys_id.fap_data("noise")
+    myplot.bodeplot(freq, gain, phi, fig, line_style='r+', nos=1,
+                    save_name=DATA_PATH + "System_Identification_from_"
+                              + str(min(F_RANGE[0])) + "_Hz_to_" + str(max(F_RANGE[1])) + "_Hz",
+                    leg=("Signal", "P_true", "P_lls", "P_iwls", "P_nls", "P_mle", "Estimated_Noise"))
+
+    myplot.show()
+
     return fig
 
 
@@ -144,8 +153,8 @@ def main(plant="r"):
     P_TRUE = mysignal.symbolic_to_tf(P, s)
 
     fig = 0
-    #fig = excitation_design(fig)
-    #fig = simulation_with_output_noise(fig, plant=P_TRUE)
+    # fig = excitation_design(fig)
+    # fig = simulation_with_output_noise(fig, plant=P_TRUE)
     fig = system_identification(fig, plant=P_TRUE)
 
 
