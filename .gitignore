@@ -1,6 +1,7 @@
 #mygitignore
 data/
 history/
+test/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
