@@ -43,10 +43,11 @@ Examples
 
 * Trajectory Planning: B-spline trajectory of jerk infinity-norm minimization with constraints
 
-![pos_jerk_infinity_norm_minimization](images/pos_jerk_infinity_norm_minimization.png)
-![vel_jerk_infinity_norm_minimization](images/vel_jerk_infinity_norm_minimization.png)
-![acc_jerk_infinity_norm_minimization](images/acc_jerk_infinity_norm_minimization.png)
-![jer_jerk_infinity_norm_minimization](images/jer_jerk_infinity_norm_minimization.png)
+![po](images/Position.png)
+![vel](images/Velocity.png)
+![acc](images/Acceleration.png)
+![jer](images/jerk.png)
+![snap](images/snap.png)
 
 
 Copyright and License
