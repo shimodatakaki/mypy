@@ -46,8 +46,8 @@ Examples
 ![po](images/Position.png)
 ![vel](images/Velocity.png)
 ![acc](images/Acceleration.png)
-![jer](images/jerk.png)
-![snap](images/snap.png)
+![jer](images/Jerk.png)
+![snap](images/Snap.png)
 
 
 Copyright and License

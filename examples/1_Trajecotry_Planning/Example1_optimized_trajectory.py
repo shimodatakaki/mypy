@@ -35,12 +35,15 @@ def min_infinity_norm(fig=0):
     AC = (0, 0)
     JC = (0, 0)
     CONSTRAINTS = (*QC, *VC, *AC, *JC)
-    NCONSTRAINTS = len(CONSTRAINTS)
     LABEL_CONSTRAINTS = (POS, VEL, ACC, JER)
 
-    nc = NCONSTRAINTS + 48  # number of control points == number of theta
+    NCONSTRAINTS = len(CONSTRAINTS)
 
-    p = max(4, MIN)  # at least jerk continous
+    assert NCONSTRAINTS == len(LABEL_CONSTRAINTS) * 2
+
+    nc = NCONSTRAINTS + 60  # number of control points == number of theta
+
+    p = 4  # jerk continous
     u = [TINIT[END] * i / (nc - 1) for i in range(nc)]  # knots
     bspl = Bspline(u, nc, p, verbose=True)
 
@@ -100,16 +103,20 @@ def min_2norm(fig=0):
     QC = (0, 1.0)
     VC = (0, 0)
     AC = (0, 0)
-    CONSTRAINTS = (*QC, *VC, *AC)
-    NCONSTRAINTS = len(CONSTRAINTS)
+    JC = (0, 0)
+    CONSTRAINTS = (*QC, *VC, *AC, *JC)
     LABEL_CONSTRAINTS = (POS, VEL, ACC, JER)
 
-    VMAX = 100
-    AMAX = 100
+    NCONSTRAINTS = len(CONSTRAINTS)
 
-    nc = NCONSTRAINTS + 48  # number of control points == number of theta
+    assert NCONSTRAINTS == len(LABEL_CONSTRAINTS) * 2
 
-    p = max(4, MIN)  # at least jerk continous
+    VMAX = 10000
+    AMAX = 10000
+
+    nc = NCONSTRAINTS + 60  # number of control points == number of theta
+
+    p = 4  # jerk continous
     u = [TINIT[END] * i / (nc - 1) for i in range(nc)]  # knots
     bspl = Bspline(u, nc, p, verbose=True)
 
@@ -119,9 +126,13 @@ def min_2norm(fig=0):
     M = np.array(bspl.basis(TSAMPLE, der=MIN))
     P = np.dot(M.T, M)
     q = np.zeros(nc)
-    A = np.array([*bspl.basis(TINIT, der=POS),
-                  *bspl.basis(TINIT, der=VEL),
-                  *bspl.basis(TINIT, der=ACC)])
+    A = None
+    for d in LABEL_CONSTRAINTS:
+        for x in bspl.basis(TINIT, der=d):
+            if A is None:
+                A = np.array(x)
+            else:
+                A = np.block([[A], [np.array(x)]])
     b = np.matrix(CONSTRAINTS).reshape((NCONSTRAINTS, 1))
     G = np.array([*bspl.basis(TSAMPLE, der=VEL),
                   *bspl.basis(TSAMPLE, der=ACC)])
@@ -140,7 +151,7 @@ def min_2norm(fig=0):
         fig += 1
         text = None
         myplot.time(TSAMPLE, bspl.bspline(theta, TSAMPLE, der=d), fig, text=text,
-                    save_name="data/2norm_" + LABELS[d][:-1].split()[0], label=("Time (s)", LABELS[d]))
+                    save_name="data/" + LABELS[d][:-1].split()[0], label=("Time (s)", LABELS[d]))
 
     myplot.show()
 
