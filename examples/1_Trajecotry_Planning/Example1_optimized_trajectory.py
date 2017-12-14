@@ -134,12 +134,14 @@ def min_2norm(fig=0):
             else:
                 A = np.block([[A], [np.array(x)]])
     b = np.matrix(CONSTRAINTS).reshape((NCONSTRAINTS, 1))
-    G = np.array([*bspl.basis(TSAMPLE, der=VEL),
-                  *bspl.basis(TSAMPLE, der=ACC)])
-    hv = np.ones((len(TSAMPLE), 1)) * VMAX
-    ha = np.ones((len(TSAMPLE), 1)) * AMAX
-    h = np.append(hv, ha, axis=0)
-    G, h = mycvxopt.constraints(G, h, -h)
+    if True:
+        G = np.array([*bspl.basis(TSAMPLE, der=VEL),*bspl.basis(TSAMPLE, der=ACC)])
+        hv = np.ones((len(TSAMPLE), 1)) * VMAX
+        ha = np.ones((len(TSAMPLE), 1)) * AMAX
+        h = np.append(hv, ha, axis=0)
+        G, h = mycvxopt.constraints(G, h, -h)
+    else:
+        G, h = None, None  # No ineq
 
     theta = mycvxopt.solve("qp", [P, q], G=G, h=h, A=A, b=b)
     print(theta)
@@ -157,31 +159,37 @@ def min_2norm(fig=0):
 
 
 def test():
-    import sys
-    print(sys.version)
+    """
 
+    :return:
+    """
+
+    """
+    Linear Quadratic Programming Example
+    """
     M = np.array([[1., 2., 0.], [-8., 3., 2.], [0., 1., 1.]])
     P = np.dot(M.T, M)
     q = np.dot(np.array([3., 2., 3.]), M).reshape((3,))
-    G = np.array([[1., 2., 1.], [2., 0., 1.], [-1., 2., -1.]])
-    h = np.array([3., 2., -2.]).reshape((3,))
+    if True:
+        G = np.array([[1., 2., 1.], [2., 0., 1.], [-1., 2., -1.]])
+        h = np.array([3., 2., -2.]).reshape((3,))
+    else:
+        G = None
+        h = None
+    print(mycvxopt.solve("qp", [P, q], G=G, h=h))
 
-    opt = {'abstol': 10 ** -5}
-
-    print(cvxopt_solve_qp(P, q, G, h, opt=opt))
-
-    print(cvxopt_solve("qp", [P, q], G=G, h=h))
-
-
-def test3():
-    c = matrix([-4., -5.])
-    G = matrix([[2., 1., -1., 0.], [1., 2., 0., -1.]])
-    h = matrix([3., 3., 0., 0.])
-    sol = solvers.lp(c, G, h)
-    print(sol['x'])
+    """
+    Linear Programming
+    """
+    c = np.array([-4., -5.])
+    G = np.array([[2., 1., -1., 0.], [1., 2., 0., -1.]]).reshape((4, 2))
+    h = np.array([3., 3., 0., 0.])
+    print(mycvxopt.solve("lp", [c], G=G, h=h))
 
 
 if __name__ == "__main__":
+    test()
+
     import os
 
     try:

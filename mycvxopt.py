@@ -9,8 +9,10 @@ import numpy as np
 def solve_qp(P, q, G=None, h=None, A=None, b=None, opt=None):
     P = .5 * (P + P.T)  # make sure P is symmetric
     args = [matrix(P), matrix(q)]
-    if G is not None:
-        args.extend([matrix(G), matrix(h)])
+    if G is None:
+        G = np.zeros((1, len(P)))
+        h = np.zeros((1, 1))
+    args.extend([matrix(G), matrix(h)])
     if A is not None:
         args.extend([matrix(A), matrix(b)])
     sol = solvers.qp(*args)
