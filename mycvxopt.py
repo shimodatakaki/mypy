@@ -1,5 +1,5 @@
 """
-
+For more information, see http://cvxopt.org/userguide/coneprog.html#semidefinite-programming .
 """
 
 from cvxopt import matrix, solvers
@@ -9,6 +9,7 @@ import numpy as np
 def solve_qp(P, q, G=None, h=None, A=None, b=None):
     """
     Solve quadratic programming
+    see also https://scaron.info/blog/quadratic-programming-in-python.html .
     :param P:
     :param q:
     :param G:
@@ -77,8 +78,35 @@ def solve_socp(c, Gl=None, hl=None, Gql=None, hql=None, A=None, b=None):
     return np.array(sol['x']).reshape((len(c),))
 
 
-def solve(solver, args, G=None, h=None, A=None, b=None, Gql=None, hql=None,
-          opt={'abstol': 10 ** -7, "reltol": 10 ** -6, 'feastol': 10 ** -7}, MAX_ITER_SOL=10, verbose=True):
+def solve_sdp(c, Gl=None, hl=None, Gsl=None, hsl=None, A=None, b=None):
+    """
+    Solve Semi-Definite Prgramming
+    :param c:
+    :param Gl:
+    :param hl:
+    :param Gsl:
+    :param hsl:
+    :param A:
+    :param b:
+    :return:
+    """
+    if Gl is None:
+        Gl = np.zeros((1, len(c)))
+        hl = np.zeros((1, 1))
+    if Gsl is None:
+        Gsl = [np.zeros((1, len(c)))]
+        hsl = [np.zeros((1, 1))]
+    args = [matrix(c), matrix(Gl), matrix(hl), [matrix(Gs) for Gs in Gsl], [matrix(hs) for hs in hsl]]
+    if A is not None:
+        args.extend([matrix(A), matrix(b)])
+    sol = solvers.sdp(*args)
+    if 'optimal' not in sol['status']:
+        return None
+    return np.array(sol['x']).reshape((len(c),))
+
+
+def solve(solver, args, G=None, h=None, A=None, b=None, Gql=None, hql=None, Gsl=None, hsl=None,
+          opt={'abstol': 10 ** -7, "reltol": 10 ** -6, 'feastol': 10 ** -7}, MAX_ITER_SOL=8, verbose=True):
     """
     Solve various optimization proglems
     :param solver:
@@ -94,7 +122,7 @@ def solve(solver, args, G=None, h=None, A=None, b=None, Gql=None, hql=None,
     :param verbose:
     :return:
     """
-    solver_func = {'qp': solve_qp, 'lp': solve_lp, "socp": solve_socp}[solver]
+    solver_func = {'qp': solve_qp, 'lp': solve_lp, "socp": solve_socp, "sdp": solve_sdp}[solver]
     theta = None
     for i in range(MAX_ITER_SOL):
         new_opt = {}
@@ -105,6 +133,8 @@ def solve(solver, args, G=None, h=None, A=None, b=None, Gql=None, hql=None,
             solvers.options[k] = v
         if solver == "socp":
             theta = solver_func(*args, Gl=G, hl=h, A=A, b=b, Gql=Gql, hql=hql)
+        elif solver == "sdp":
+            theta = solver_func(*args, Gl=G, hl=h, A=A, b=b, Gsl=Gsl, hsl=hsl)
         else:
             theta = solver_func(*args, G=G, h=h, A=A, b=b)
         if theta is not None:
@@ -120,6 +150,7 @@ def solve_min_infinity_norm(F, f, G=None, h=None, A=None, b=None, verbose=True):
     Transform infinity norm minimization problem:
     min ||tau||_infty = ||Fx - f||_infty s.t. Gx<=h, Ax=b into
     min c^T[tau x] s.t. tau e >= Fx - f and tau e >= -(Fx - f).
+    see also http://docs.mosek.com/8.1/toolbox/least-squares.html .
     :param F:
     :param f:
     :param G:
@@ -166,6 +197,8 @@ def qc2socp(A, b, c, d):
     Transfrom ||A*x + b*x|| <= c*x + d into
     G*x + [s0; s1] = h, s.t. s0 >= ||s1||2, G = [[-c.T], [-A]], and h = [d; b]
     for second-oder cone programming
+    For more information, see
+    https://pwnetics.wordpress.com/2010/12/18/second-order-cone-programming-with-cvxopt/ .
     :param A:
     :param b:
     :param c:
@@ -174,5 +207,5 @@ def qc2socp(A, b, c, d):
     """
     Gq = np.block([[-c.T], [-A]])
     hq = np.append(d, b)
-    Gq.reshape((Gq.shape[0]*Gq.shape[1]//len(c), len(c)))
+    Gq.reshape((Gq.shape[0] * Gq.shape[1] // len(c), len(c)))
     return Gq, hq
