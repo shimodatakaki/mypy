@@ -6,7 +6,17 @@ from cvxopt import matrix, solvers
 import numpy as np
 
 
-def solve_qp(P, q, G=None, h=None, A=None, b=None, opt=None):
+def solve_qp(P, q, G=None, h=None, A=None, b=None):
+    """
+    Solve quadratic programming
+    :param P:
+    :param q:
+    :param G:
+    :param h:
+    :param A:
+    :param b:
+    :return:
+    """
     P = .5 * (P + P.T)  # make sure P is symmetric
     args = [matrix(P), matrix(q)]
     if G is None:
@@ -21,7 +31,16 @@ def solve_qp(P, q, G=None, h=None, A=None, b=None, opt=None):
     return np.array(sol['x']).reshape((P.shape[1],))
 
 
-def solve_lp(c, G, h, A=None, b=None, opt=None):
+def solve_lp(c, G, h, A=None, b=None):
+    """
+    Sovle linear programming
+    :param c:
+    :param G:
+    :param h:
+    :param A:
+    :param b:
+    :return:
+    """
     args = [matrix(c), matrix(G), matrix(h)]
     if A is not None:
         args.extend([matrix(A), matrix(b)])
@@ -31,14 +50,51 @@ def solve_lp(c, G, h, A=None, b=None, opt=None):
     return np.array(sol['x']).reshape((len(c),))
 
 
-def solve(solver, args, G=None, h=None, A=None, b=None,
-          opt={'abstol': 10 ** -7, "reltol": 10 ** -6, 'feastol': 10 ** -7}, MAX_ITER_SOL=10, verbose=True):
-    if solver == 'qp':
-        solver_func = solve_qp
-    elif solver == 'lp':
-        solver_func = solve_lp
-    else:
+def solve_socp(c, Gl=None, hl=None, Gql=None, hql=None, A=None, b=None):
+    """
+    Sovle Second Order Cone Programming
+    :param c:
+    :param Gl:
+    :param hl:
+    :param Gql:
+    :param hql:
+    :param A:
+    :param b:
+    :return:
+    """
+    if Gl is None:
+        Gl = np.zeros((1, len(c)))
+        hl = np.zeros((1, 1))
+    if Gql is None:
+        Gql = [np.zeros((1, len(c)))]
+        hql = [np.zeros((1, 1))]
+    args = [matrix(c), matrix(Gl), matrix(hl), [matrix(Gq) for Gq in Gql], [matrix(hq) for hq in hql]]
+    if A is not None:
+        args.extend([matrix(A), matrix(b)])
+    sol = solvers.socp(*args)
+    if 'optimal' not in sol['status']:
         return None
+    return np.array(sol['x']).reshape((len(c),))
+
+
+def solve(solver, args, G=None, h=None, A=None, b=None, Gql=None, hql=None,
+          opt={'abstol': 10 ** -7, "reltol": 10 ** -6, 'feastol': 10 ** -7}, MAX_ITER_SOL=10, verbose=True):
+    """
+    Solve various optimization proglems
+    :param solver:
+    :param args:
+    :param G:
+    :param h:
+    :param A:
+    :param b:
+    :param Gq:
+    :param hq:
+    :param opt:
+    :param MAX_ITER_SOL:
+    :param verbose:
+    :return:
+    """
+    solver_func = {'qp': solve_qp, 'lp': solve_lp, "socp": solve_socp}[solver]
     theta = None
     for i in range(MAX_ITER_SOL):
         new_opt = {}
@@ -47,7 +103,10 @@ def solve(solver, args, G=None, h=None, A=None, b=None,
                 new_opt[k] = v * 10 ** i
         for k, v in new_opt.items():
             solvers.options[k] = v
-        theta = solver_func(*args, G=G, h=h, A=A, b=b, opt=new_opt)
+        if solver == "socp":
+            theta = solver_func(*args, Gl=G, hl=h, A=A, b=b, Gql=Gql, hql=hql)
+        else:
+            theta = solver_func(*args, G=G, h=h, A=A, b=b)
         if theta is not None:
             break
         if verbose:
@@ -90,6 +149,30 @@ def solve_min_infinity_norm(F, f, G=None, h=None, A=None, b=None, verbose=True):
 
 
 def constraints(G, ub, lb):
+    """
+    Transform lb <= Gx <= ub then return Gx <= h
+    :param G:
+    :param ub:
+    :param lb:
+    :return:
+    """
     G = np.block([[G], [-G]])
     h = np.block([[ub], [-lb]])
     return G, h
+
+
+def qc2socp(A, b, c, d):
+    """
+    Transfrom ||A*x + b*x|| <= c*x + d into
+    G*x + [s0; s1] = h, s.t. s0 >= ||s1||2, G = [[-c.T], [-A]], and h = [d; b]
+    for second-oder cone programming
+    :param A:
+    :param b:
+    :param c:
+    :param d:
+    :return:
+    """
+    Gq = np.block([[-c.T], [-A]])
+    hq = np.append(d, b)
+    Gq.reshape((Gq.shape[0]*Gq.shape[1]//len(c), len(c)))
+    return Gq, hq

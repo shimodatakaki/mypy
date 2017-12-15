@@ -135,7 +135,7 @@ def min_2norm(fig=0):
                 A = np.block([[A], [np.array(x)]])
     b = np.matrix(CONSTRAINTS).reshape((NCONSTRAINTS, 1))
     if True:
-        G = np.array([*bspl.basis(TSAMPLE, der=VEL),*bspl.basis(TSAMPLE, der=ACC)])
+        G = np.array([*bspl.basis(TSAMPLE, der=VEL), *bspl.basis(TSAMPLE, der=ACC)])
         hv = np.ones((len(TSAMPLE), 1)) * VMAX
         ha = np.ones((len(TSAMPLE), 1)) * AMAX
         h = np.append(hv, ha, axis=0)
@@ -185,6 +185,28 @@ def test():
     G = np.array([[2., 1., -1., 0.], [1., 2., 0., -1.]]).reshape((4, 2))
     h = np.array([3., 3., 0., 0.])
     print(mycvxopt.solve("lp", [c], G=G, h=h))
+
+    """
+    Second Order Cone Programming
+    min x1 + x2
+    s.t. ||x||2 <= 1 eqiv. x in circle with radius=1
+    :return:
+    """
+    A0 = np.array([[1., 0], [0, 1]])
+    A0.reshape((2, 2))
+    b0 = np.array([0., 0])
+    b0.reshape((2, 1))
+    c0 = np.array([0., 0])
+    c0.reshape((2, 1))
+    d0 = np.array([1.])
+
+    gq0, hq0 = mycvxopt.qc2socp(A0, b0, c0, d0)
+
+    Gq = [gq0]
+    hq = [hq0]
+
+    c = np.array([1., 1])
+    print(mycvxopt.solve("socp", [c], Gql=Gq, hql=hq))
 
 
 if __name__ == "__main__":
