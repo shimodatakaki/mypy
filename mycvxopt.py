@@ -1,5 +1,5 @@
 """
-For more information, see http://cvxopt.org/userguide/coneprog.html#semidefinite-programming .
+For more information, see http://cvxopt.org/userguide/coneprog.html.
 """
 
 from cvxopt import matrix, solvers
@@ -142,6 +142,8 @@ def solve(solver, args, G=None, h=None, A=None, b=None, Gql=None, hql=None, Gsl=
         if verbose:
             print(new_opt)
             print("This condition is ill. Relaxing the conditon by 1000%...")
+    if theta is None:
+        raise ValueError("THIS IS NOT FEASIBLE!")
     return theta
 
 
