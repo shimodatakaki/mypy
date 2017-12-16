@@ -153,8 +153,8 @@ def main(plant="r"):
     P_TRUE = mysignal.symbolic_to_tf(P, s)
 
     fig = 0
-    # fig = excitation_design(fig)
-    # fig = simulation_with_output_noise(fig, plant=P_TRUE)
+    fig = excitation_design(fig)
+    fig = simulation_with_output_noise(fig, plant=P_TRUE)
     fig = system_identification(fig, plant=P_TRUE)
 
 

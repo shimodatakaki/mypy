@@ -3,8 +3,7 @@ Example3_MIMO_Identification:
 MIMO Identification of G=[[G11, G12],[G21,G22]]
 """
 
-from fdi.fdi import *
-import numpy as np
+from myfdi import *
 
 FS = 4000  # sampling frequency
 R = 1.02  # ratio of frequency evolution
@@ -60,6 +59,7 @@ def sys_id():
         print(theta)
         save_theta_to_csv(mimo_id.n_den, theta, 'data/mimo_theta_mle_'+str(i+1)+'.csv')
         G_mle = theta_to_tf(mimo_id.n_den, theta)
+        print("MLE", str(i),  G_mle)
         fig += 1
         myplot.bode(G[i], fig, w=o_lines)
         myplot.bode(G_mle, fig, w=o_lines,
