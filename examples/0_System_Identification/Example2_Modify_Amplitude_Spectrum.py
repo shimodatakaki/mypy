@@ -3,7 +3,8 @@ Example2
 The amplitude of the input spectrum is modified by inverse of LPF(s) for high frequency excitation.
 """
 
-from myfdi import *
+from fdi.fdi import *
+import numpy as np
 
 FS = 4000  # sampling frequency
 R = 1.05  # ratio of frequency evolution

@@ -1,5 +1,5 @@
 """
-Example0: B-spline test
+TEST
 """
 from mytrajectory import Bspline
 import numpy as np
