@@ -13,12 +13,14 @@ class ControllerDesign():
          (3) Gain Margin Linear Inequalities (self.g_dgm, self.phi_dgm),
          (4) Second Phase Margin Linear Inequalities (self.theta_dpm2),
          (5) Gain Minimum/Maximum Linear Inequalities,
-         (6) Other Linear Equalities/Inequalities.
+         (6) Stability Margin (Disk) Linear Inequalities via CCCP method,
+         (7) Robust Stability Quadratic Inequalities (using socp or sdp),
+         (8) Other Linear/Quadratic Equalities/Inequalities.
     Default Controller: PIDs + 10 FIRs (13 variables)
     Default Optimization: solver=="lp", min c.T * rho, s.t. Gl*rho <= hl, A*rho = b
     """
 
-    def __init__(self, o, g, nopid="pid", taud=0.001, nofir=10, ts=0.001):
+    def __init__(self, o, g, nopid="pid", taud=0.001, nofir=10, ts=0.001, rho0=None):
         """
         L = P*C = X*rho, where X = g*phi.T. phi:Basis FRF of controller, rho:Controller parameters.
         x, y = real(L), imag(L)
@@ -36,16 +38,21 @@ class ControllerDesign():
         self.nofir = nofir
         self.NOC = len(nopid) + nofir
         self.phi = [np.array([*[c(_o) for c in pid(nopid, taud=taud)], *[c(_o) for c in fir(nofir=nofir, ts=ts)]])
-               for _o in o]
+                    for _o in o]
         self.X = np.array([_g * _phi for _g, _phi in zip(g, self.phi)])
         self.X.reshape((self.F, self.NOC))
         # Objective function and linear inequalties for optimization
         self.c = np.zeros((self.NOC, 1))  # default FIND
         self.c.reshape((self.NOC, 1))
-        self.Gl = None
-        self.hl = None
+        self.Gl, self.hl = None, None
+        self.Gql, self.hql = [], []
+        self.Gsl, self.hsl = [], []
+        # Initial solution
+        if rho0 is None:
+            rho0 = np.array([10 ** (-6) if i < len(nopid) else 0 for i in range(self.NOC)])
+        self.rho = rho0
 
-    def specification(self, o_dgc, theta_dpm, gdb_dgm, phi_dgc=np.pi / 3, theta_dpm2=np.pi / 4, phi_dgm=np.pi / 6):
+    def specification(self, o_dgc, theta_dpm, gdb_dgm, phi_dgc=np.pi / 6, theta_dpm2=np.pi / 4, phi_dgm=np.pi / 6):
         """
 
         :param o_dgc: Desired Gain-Crossover Frequency (rad/s)
@@ -64,7 +71,7 @@ class ControllerDesign():
         self.phi_dgm = phi_dgm
         self.theta_dpm2 = theta_dpm2
 
-    def gccond(self, nlower=10):
+    def gccond(self, nlower=2):
         """
         (1) Gain Crossover Frequency Constraints:
         y <= -tan(self.phi_dgc) * x - 1/cos(self.phi_dgc)
@@ -130,7 +137,7 @@ class ControllerDesign():
         """
         if not self.l_gm:
             return False
-        self.l_pm2 = [i for i, _o in enumerate(self.o) if (max(self.l_gm) < _o)]
+        self.l_pm2 = [i for i, _o in enumerate(self.o) if (max(self.l_gm) <= _o)]
         Gl = np.array([- np.real(self.X[i]) for i in self.l_pm2])
         Gl.reshape((len(self.l_pm2), self.NOC))
         hl = np.ones((len(Gl), 1)) * np.cos(self.theta_dpm2)
@@ -147,6 +154,33 @@ class ControllerDesign():
         for i in range(nocon):
             Gl[i][i] = -1.
         hl = - glower * np.ones((nocon, 1))
+        self.lcond_append(Gl, hl)
+
+    def stabilitycond(self, rm, sigma=-1):
+        """
+        (6) Stability Constaints:
+        (x-sigma)^2 + y^2 >= rm^2
+        for o >> o_dgc
+        This condition is CONCAVE, so convex solvers cannot deal with it.
+        Here, CCCP (Concave-Convex Procedure) is applied to make it convex via Taylor expansion, i.e.
+          f(xt) - g(xt) >>> f(xt) - g(xt-1) - dg(xt-1)/dxt-1.T * (xt - xt-1),
+          where f is convex and g is concave.
+          No GURANTEES for convergence (it may converge to saddle points or local minima),
+          yet now it becomes convex constraints.
+        :param rm: radius of stability disk
+        :param sigma: center of stability disk
+        :return:
+        """
+        assert - sigma >= rm
+        if not self.l_gm:
+            return False
+        self.l_stb = [i for i, _o in enumerate(self.o) if (max(self.l_gm) <= _o)]
+        L0 = np.dot(self.X, self.rho)
+        n = L0 - sigma
+        Gl = np.array([- np.real(np.conj(n[i]) * self.X[i]) / np.absolute(n[i]) for i in self.l_pm2])
+        Gl.reshape((len(self.l_pm2), self.NOC))
+        hl = np.array([-rm - np.real(n[i]) / np.absolute(n[i]) * sigma
+                       for i in self.l_pm2]).reshape((len(self.l_pm2), 1)) * np.ones((len(self.l_pm2), 1))
         self.lcond_append(Gl, hl)
 
     def set_obj(self, c):
@@ -171,14 +205,38 @@ class ControllerDesign():
             self.Gl = np.block([[self.Gl], [Gl]])
             self.hl = np.block([[self.hl], [hl]])
 
-    def optimize(self, solver="lp"):
+    def robustcond(self, gamma):
+        """
+        (7) Robust Stability Constratins:
+        x**2 + y**2 < gamma**2
+        for o >> o_dgc
+        Solver must be socp or sdp, that usually takes more time.
+        :param gamma:
+        :return:
+        """
+        if not self.l_gm:
+            return False
+        self.l_rbs = [i for i, _o in enumerate(self.o) if (max(self.l_gm) <= _o)]
+        for i in self.l_rbs:
+            are, aim = np.real(self.X[i]), np.imag(self.X[i])
+            A0 = np.block([[are], [aim]])
+            A0.reshape((2, self.NOC))
+            b0 = np.zeros((len(A0), 1))
+            c0 = np.zeros((self.NOC, 1))
+            d0 = gamma
+            gq0, hq0 = mycvxopt.qc2socp(A0, b0, c0, d0)
+            self.Gql.append(gq0)
+            self.hql.append(hq0)
+
+    def optimize(self, solver="socp"):
         """
         Available Solvers: Linear Programming (of course including min infinity-norm/1-norm), Quadratic Prgramming,
-        Second-Order Conce Prgramming, Semi-Definite Progamming (or LMI)
+        Second-Order Cone Prgramming, Semi-Definite Progamming (or LMI)
         :param solver:
         :return:
         """
-        self.rho = mycvxopt.solve(solver, [self.c], G=self.Gl, h=self.hl, MAX_ITER_SOL=1)
+        self.rho = mycvxopt.solve(solver, [self.c], G=self.Gl, h=self.hl, Gql=self.Gql, hql=self.hql, Gsl=self.Gsl,
+                                  hsl=self.hsl, MAX_ITER_SOL=1)
         return self.rho
 
     def freqresp(self):
@@ -186,8 +244,13 @@ class ControllerDesign():
         phi.reshape((self.F, self.NOC))
         self.rho.reshape((self.NOC, 1))
         ret = np.dot(self.phi, self.rho)
-        assert ret.shape == (self.F, )
+        assert ret.shape == (self.F,)
         return ret
+
+    def lreset(self):
+        self.Gl = None
+        self.hl = None
+
 
 def pid(nopid, taud):
     """
