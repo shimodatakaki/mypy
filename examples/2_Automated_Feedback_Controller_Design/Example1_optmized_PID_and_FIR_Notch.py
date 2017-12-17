@@ -1,5 +1,5 @@
 """
-Example1: optmized_PID_and_FIR_Notch
+Example1: Example1_optmized_PID_and_FIR_Notch
 """
 
 from myfbcd import *
@@ -49,7 +49,7 @@ def plant(fig, n):
     return fig, o, h
 
 
-def optimize(fig, o, g, nofir=10, f_desired_list=[20 + 4 * i for i in range(25)]):
+def optimize(fig, o, g, nofir=10, f_desired_list=[30 + 4 * i for i in range(25)]):
     """
     calc pids and firs
     :param o:
@@ -59,31 +59,40 @@ def optimize(fig, o, g, nofir=10, f_desired_list=[20 + 4 * i for i in range(25)]
     THETA_DPM = 30 / 180 * np.pi  # Phase Margin
     THETA_DPM2 = 45 / 180 * np.pi  # Second Phase Margin
     GDB_DGM = 10  # Gain Margin in (dB)
+    SIGMA = -1
+    RM = np.sqrt((1 + SIGMA) ** 2 - 2 * SIGMA * (1 - np.cos(THETA_DPM2)))
+    NSTBITER = 5
+    is_robust = False
+    GAMMA = 0.5
 
-    TAUD = 0.005  # Pseudo Differential Cut-off for D Control
+    TAUD = 4 * 10 ** (-3)  # Pseudo Differential Cut-off for D Control
     NOFIR = nofir  # Number of FIRs
     NOPID = "pid"
-    TS = 0.0005  # sampring of FIRs
+    TS = 0.5 * 10 ** (-3)  # sampring of FIRs
 
     _f = 0
-    _c = []
+    _c = None
     tol = 3
     for f in f_desired_list:
+        F_DGC = 2 * np.pi * f  # Desired Cross-over Frequency
+        print("Try: ", f, " Hz")
+        fbc = ControllerDesign(o, g, nopid=NOPID, taud=TAUD, nofir=NOFIR, ts=TS)
+        fbc.specification(F_DGC, THETA_DPM, GDB_DGM, theta_dpm2=THETA_DPM2)  # set constraints
         try:
-            F_DGC = 2 * np.pi * f  # Desired Cross-over Frequency
-            print("Try: ", f, " Hz")
-            fbc = ControllerDesign(o, g, nopid=NOPID, taud=TAUD, nofir=NOFIR, ts=TS)
+            for i in range(NSTBITER):
+                fbc.gccond()  # append crossover-gain constraint
+                fbc.pmcond()  # append phase margin constraint
+                fbc.gmcond()  # append gain margin constraint, more robust if nupper = 1 / 20
+                fbc.pm2cond()  # append second phase margin constraint
+                fbc.gaincond()  # append gain constraints
+                fbc.stabilitycond(rm=RM, sigma=SIGMA) #append stability condition
+                if is_robust:
+                    fbc.robustcond(GAMMA) #may need much time
+                rho = fbc.optimize()
+                _f = f
+                _c = fbc
 
-            fbc.specification(F_DGC, THETA_DPM, GDB_DGM, theta_dpm2=THETA_DPM2)  # set constraints
-            fbc.gccond()  # append crossover-gain constraint
-            fbc.pmcond()  # append phase margin constraint
-            fbc.gmcond(nupper=1 / 10)  # append gain margin constraint
-            fbc.pm2cond()  # append second phase margin constraint
-            fbc.gaincond()  # append gain constraints
-
-            rho = fbc.optimize()
-            _f = f
-            _c.append(fbc)
+                fbc.lreset()
         except:
             tol -= 1
             if tol < 0:
@@ -99,8 +108,10 @@ def optimize(fig, o, g, nofir=10, f_desired_list=[20 + 4 * i for i in range(25)]
     print("Best cross-over frequency:", _f, " Hz")
     print("PIDs:", rho[:3])
     print("FIRs:", rho[3:])
-    fbc = _c[-1]
+    fbc = _c
     assert fbc.rho[-1] == rho[-1] and fbc.rho[0] == rho[0]
+
+    exit()
 
     ##########Plot1##########
     L = np.dot(fbc.X, rho)
@@ -138,13 +149,28 @@ def optimize(fig, o, g, nofir=10, f_desired_list=[20 + 4 * i for i in range(25)]
     # Second Phase Margin
     _l = np.array([L[i] for i in fbc.l_pm2])
     _y = np.imag(_l)
-    myplot.time(np.real(_l), np.imag(_l), fig, line_style="y-.")
-    myplot.time(- np.cos(fbc.theta_dpm2) * np.ones(len(_y)), _y, fig, line_style="y--",
+    myplot.time(np.real(_l), np.imag(_l), fig, line_style="y--")
+    myplot.time(- np.cos(fbc.theta_dpm2) * np.ones(len(_y)), _y, fig, line_style="y--")
+
+    # Stanility Constraint
+    _l = np.array([L[i] for i in fbc.l_stb])
+    myplot.time((RM * np.cos(_theta)) + SIGMA, RM * np.sin(_theta), fig, line_style="y:",
                 xl=[-3, 3], yl=[-3, 3], leg=("Nyquist", "r=1", "origin", "critical", "G.C. Cond.", "G.C. Cond.",
                                              "P.M. Cond.", "P.M. Cond.", "G.M. Cond.", "G.M. Cond.",
-                                             "P.M.2 Cond.", "P.M.2 Cond."),
+                                             "P.M.2 Cond.", "P.M.2 Cond.", "Stb. Cond.", "Stb. Cond."),
                 label=("Re", "Im"), save_name=DATA + "/" + str(fig) + "_nyquist",
-                text=(-3, 3.1, "Optimized Gain-Crossover Frequency (Hz): " + str(_f)))
+                text=(-3, 3.1, "Optimized Gain-Crossover Frequency (Hz): " + str(_f)))  # r=1
+
+    if is_robust:
+        #Robust Constraint
+        _l = np.array([L[i] for i in fbc.l_rbs])
+        myplot.time((GAMMA * np.cos(_theta)), GAMMA * np.sin(_theta), fig, line_style="y-.",
+                    xl=[-3, 3], yl=[-3, 3], leg=("Nyquist", "r=1", "origin", "critical", "G.C. Cond.", "G.C. Cond.",
+                                                 "P.M. Cond.", "P.M. Cond.", "G.M. Cond.", "G.M. Cond.",
+                                                 "P.M.2 Cond.", "P.M.2 Cond.", "Stb. Cond.", "Rbs. Cond."),
+                    label=("Re", "Im"), save_name=DATA + "/" + str(fig) + "_nyquist",
+                    text=(-3, 3.1, "Optimized Gain-Crossover Frequency (Hz): " + str(_f)))  # r=1
+
     plt.grid()
 
     ##########Plot2##########
@@ -157,8 +183,6 @@ def optimize(fig, o, g, nofir=10, f_desired_list=[20 + 4 * i for i in range(25)]
     # myplot.bodeplot([o[i] / 2 / np.pi for i in fbc.l_gm], _db, None, fig, nos=1,
     #                 line_style="r:", lw=1)
     # Phase Margin
-    myplot.bodeplot([o[i] / 2 / np.pi for i in fbc.l_pm], None, [180 - THETA_DPM / np.pi * 180 for i in fbc.l_pm], fig,
-                    nos=-2, line_style="g--", lw=1)
     myplot.bodeplot([o[i] / 2 / np.pi for i in fbc.l_pm], None, [-180 + THETA_DPM / np.pi * 180 for i in fbc.l_pm], fig,
                     nos=-2, line_style="g--", lw=1)
     # Gain-Crossover
@@ -175,12 +199,12 @@ def optimize(fig, o, g, nofir=10, f_desired_list=[20 + 4 * i for i in range(25)]
     # Plot
     myplot.bodeplot(o / 2 / np.pi, ldb, np.angle(L, deg=True), fig, line_style='b-',
                     save_name=DATA + "/" + str(fig) + "_bode",
-                    leg=("P.M.", "P.M.", str(_f) + " Hz", "P.M.2", "P.M.2", "Bode"))
+                    leg=("P.M.", str(_f) + " Hz", "P.M.2", "P.M.2", "Bode"))
     plt.grid()
     ##########Plot3##########
     fig += 1
     c = fbc.freqresp()
-    myplot.bodeplot(o / 2 /np.pi, 20 * np.log10(abs(c)), np.angle(c, deg=True), fig, line_style='b-',
+    myplot.bodeplot(o / 2 / np.pi, 20 * np.log10(abs(c)), np.angle(c, deg=True), fig, line_style='b-',
                     save_name=DATA + "/" + str(fig) + "_controller")
 
     return fig
@@ -198,11 +222,9 @@ if __name__ == "__main__":
 
     fig = -1
 
-    # fig, o, h = plant(fig, 0)
-    # fig = optimize(fig, o, h, f_desired_list=[120 + 10 * i for i in range(25)])
-
     fig, o, h = plant(fig, 1)
-    # fig = optimize(fig, o, h, nofir=0, f_desired_list=[1 + i for i in range(1, 20)])
-    fig = optimize(fig, o, h)
+
+    fig = optimize(fig, o, h, nofir=0, f_desired_list=[1 + i for i in range(50)]) #PID Only
+    fig = optimize(fig, o, h, nofir=10) #PID + 10 FIRs
 
     myplot.show()
