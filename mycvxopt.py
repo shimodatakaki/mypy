@@ -1,5 +1,5 @@
 """
-For more information, see http://cvxopt.org/userguide/coneprog.html.
+For more information, see http://cvxopt.org/userguide/coneprog.html
 """
 
 from cvxopt import matrix, solvers
@@ -106,7 +106,7 @@ def solve_sdp(c, Gl=None, hl=None, Gsl=[], hsl=[], A=None, b=None):
 
 
 def solve(solver, args, G=None, h=None, A=None, b=None, Gql=[], hql=[], Gsl=[], hsl=[],
-          opt={'abstol': 10 ** -7, "reltol": 10 ** -6, 'feastol': 10 ** -7}, MAX_ITER_SOL=8, verbose=True):
+          opt={'abstol': 10 ** -7, "reltol": 10 ** -6, 'feastol': 10 ** -7, 'show_progress':False}, MAX_ITER_SOL=8, verbose=True):
     """
     Solve various optimization proglems
     :param solver:

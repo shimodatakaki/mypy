@@ -8,6 +8,7 @@ from scipy import signal
 import myplot
 import mycvxopt
 import mysignal
+import mycsv
 
 DATA = "data"
 
@@ -110,8 +111,7 @@ def optimize(fig, o, g, nofir=10, f_desired_list=[30 + 4 * i for i in range(25)]
     print("FIRs:", rho[3:])
     fbc = _c
     assert fbc.rho[-1] == rho[-1] and fbc.rho[0] == rho[0]
-
-    exit()
+    mycsv.save(rho, save_name = DATA + "/rho" + str(fig) + ".csv", header=("P,I,D, FIR(1+n) for n in range(10)","taud (s):"+str(TAUD),"FIR sampling (s):"+str(TS)))
 
     ##########Plot1##########
     L = np.dot(fbc.X, rho)
