@@ -51,7 +51,7 @@ def solve_lp(c, G, h, A=None, b=None):
     return np.array(sol['x']).reshape((len(c),))
 
 
-def solve_socp(c, Gl=None, hl=None, Gql=None, hql=None, A=None, b=None):
+def solve_socp(c, Gl=None, hl=None, Gql=[], hql=[], A=None, b=None):
     """
     Sovle Second Order Cone Programming
     :param c:
@@ -66,7 +66,7 @@ def solve_socp(c, Gl=None, hl=None, Gql=None, hql=None, A=None, b=None):
     if Gl is None:
         Gl = np.zeros((1, len(c)))
         hl = np.zeros((1, 1))
-    if Gql is None:
+    if not Gql:
         Gql = [np.zeros((1, len(c)))]
         hql = [np.zeros((1, 1))]
     args = [matrix(c), matrix(Gl), matrix(hl), [matrix(Gq) for Gq in Gql], [matrix(hq) for hq in hql]]
@@ -78,7 +78,7 @@ def solve_socp(c, Gl=None, hl=None, Gql=None, hql=None, A=None, b=None):
     return np.array(sol['x']).reshape((len(c),))
 
 
-def solve_sdp(c, Gl=None, hl=None, Gsl=None, hsl=None, A=None, b=None):
+def solve_sdp(c, Gl=None, hl=None, Gsl=[], hsl=[], A=None, b=None):
     """
     Solve Semi-Definite Prgramming
     :param c:
@@ -93,7 +93,7 @@ def solve_sdp(c, Gl=None, hl=None, Gsl=None, hsl=None, A=None, b=None):
     if Gl is None:
         Gl = np.zeros((1, len(c)))
         hl = np.zeros((1, 1))
-    if Gsl is None:
+    if not Gsl:
         Gsl = [np.zeros((1, len(c)))]
         hsl = [np.zeros((1, 1))]
     args = [matrix(c), matrix(Gl), matrix(hl), [matrix(Gs) for Gs in Gsl], [matrix(hs) for hs in hsl]]
@@ -105,7 +105,7 @@ def solve_sdp(c, Gl=None, hl=None, Gsl=None, hsl=None, A=None, b=None):
     return np.array(sol['x']).reshape((len(c),))
 
 
-def solve(solver, args, G=None, h=None, A=None, b=None, Gql=None, hql=None, Gsl=None, hsl=None,
+def solve(solver, args, G=None, h=None, A=None, b=None, Gql=[], hql=[], Gsl=[], hsl=[],
           opt={'abstol': 10 ** -7, "reltol": 10 ** -6, 'feastol': 10 ** -7}, MAX_ITER_SOL=8, verbose=True):
     """
     Solve various optimization proglems
