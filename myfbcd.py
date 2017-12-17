@@ -150,10 +150,14 @@ class ControllerDesign():
         :param nocon:
         :return:
         """
-        Gl = np.zeros((nocon, self.NOC))
-        for i in range(nocon):
-            Gl[i][i] = -1.
-        hl = - glower * np.ones((nocon, 1))
+        Gl = np.zeros((nocon + 1 * (self.nofir > 0), self.NOC))
+        for i in range(nocon + 1):
+            if i < nocon:
+                Gl[i][i] = -1.
+            else:
+                for j in range(nocon, self.NOC):
+                    Gl[i][j] = -1.  # sum of FIR should be positive
+        hl = - glower * np.ones((nocon + 1 * (self.nofir > 0), 1))
         self.lcond_append(Gl, hl)
 
     def stabilitycond(self, rm, sigma=-1):

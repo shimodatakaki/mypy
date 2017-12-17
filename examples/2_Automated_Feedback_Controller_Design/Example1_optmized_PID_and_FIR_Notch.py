@@ -71,6 +71,18 @@ def optimize(fig, o, g, nofir=10, f_desired_list=[30 + 4 * i for i in range(25)]
     NOPID = "pid"
     TS = 0.5 * 10 ** (-3)  # sampring of FIRs
 
+    f = 2
+    F_DGC = 2 * np.pi * f  # Desired Cross-over Frequency
+    fbc = ControllerDesign(o, g, nopid=NOPID, taud=TAUD, nofir=NOFIR, ts=TS)
+    fbc.specification(F_DGC, THETA_DPM, GDB_DGM, theta_dpm2=THETA_DPM2)  # set constraints
+    fbc.gccond()  # append crossover-gain constraint
+    fbc.pmcond()  # append phase margin constraint
+    fbc.gmcond()  # append gain margin constraint, more robust if nupper = 1 / 20
+    fbc.pm2cond()  # append second phase margin constraint
+    fbc.gaincond()  # append gain constraints
+    fbc.stabilitycond(rm=RM, sigma=SIGMA)  # append stability condition
+    rho = fbc.optimize()
+
     _f = 0
     _c = None
     tol = 3
