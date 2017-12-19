@@ -7,6 +7,7 @@ from scipy import signal
 import mysignal
 import mynum
 
+
 class ControllerDesign():
     """
     Find a linear FB controller that satisfies desired (given) linear constraints for FB,
@@ -164,9 +165,8 @@ class ControllerDesign():
         hl = - glower * np.ones((nocon + 1 * (self.nofir > 0), 1))
         self.lcond_append(Gl, hl)
 
-    def stabilitycond(self, rm, sigma=-1):
+    def outofdiskcond(self, r, sigma, l=None):
         """
-        (6) Stability Constaints:
         (x-sigma)**2 + y**2 >= rm**2
         for all o
         This condition is CONCAVE, so convex solvers cannot deal with it.
@@ -175,38 +175,45 @@ class ControllerDesign():
           where f is convex and g is concave.
           No GURANTEES for convergence (it may converge to saddle points or local minima),
           yet now it becomes convex constraints.
+        :param r:
+        :param sigma:
+        :param l:
+        :return:
+        """
+        if l is None:
+            l = self.l
+        L0 = np.dot(self.X, self.rho)
+        n = L0 - sigma
+        Gl = np.array([- np.real(np.conj(n[i]) * self.X[i]) / abs(n[i]) for i in l])
+        Gl.reshape((len(l), self.NOC))
+        hl = np.array([-r[i] - np.real(n[i]) / abs(n[i]) * sigma
+                       for i in l]).reshape((len(l), 1)) * np.ones((len(l), 1))
+        self.lcond_append(Gl, hl)
+
+    def stabilitycond(self, rm, sigma=-1):
+        """
+        (6) Stability Constaints:
+        (x-sigma)**2 + y**2 >= rm**2
+        for all o
         :param rm: radius of stability disk
         :param sigma: center of stability disk
         :return:
         """
         assert - sigma >= rm
-        self.l_stb = self.l
-        L0 = np.dot(self.X, self.rho)
-        n = L0 - sigma
-        Gl = np.array([- np.real(np.conj(n[i]) * self.X[i]) / np.absolute(n[i]) for i in self.l_stb])
-        Gl.reshape((len(self.l_stb), self.NOC))
-        hl = np.array([-rm - np.real(n[i]) / np.absolute(n[i]) * sigma
-                       for i in self.l_stb]).reshape((len(self.l_stb), 1)) * np.ones((len(self.l_stb), 1))
-        self.lcond_append(Gl, hl)
+        r = rm * np.ones(len(self.l))
+        self.outofdiskcond(r, sigma)
 
     def nominalcond(self, db=-40):
         """
         (8) Nominal Performance Constraints:
-        (x-1)**2 + y**2 >= |W1(s)|, where W1(s) = (self.o_dgc/s) ** m
+        (x-1)**2 + y**2 >= |W1(s)|**2, where W1(s) = (self.o_dgc/s) ** m
         for all o
-        This condtion is also concave as stabilitycond, so it also uses CCCP.
-        Default nominal sensitivity is -40 dB to suppress lower frequency disturbance.
         :param db:
         :return:
         """
-        L0 = np.dot(self.X, self.rho)
-        n = L0 + 1
-        Gl = np.array([- np.real(np.conj(n[i]) * self.X[i]) / np.absolute(n[i]) for i in self.l])
-        Gl.reshape((len(self.l), self.NOC))
         m = db / (-20)
-        hl = np.array([- (self.o_dgc / self.o[i]) ** m + np.real(n[i]) / np.absolute(n[i])
-                       for i in self.l]).reshape((len(self.l), 1)) * np.ones((len(self.l), 1))
-        self.lcond_append(Gl, hl)
+        r = [(self.o_dgc / self.o[i]) ** m for i in self.l]
+        self.outofdiskcond(r, -1)
 
     def set_obj(self, c):
         """

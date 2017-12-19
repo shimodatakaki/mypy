@@ -85,11 +85,14 @@ def optimize(fig, o, g, nofir=5, f_desired_list=[50 + 150 * i for i in range(10)
     NOPID = "pid"
     TS = 50 * 10 ** (-6)  # sampring of FIRs
 
-    _f = 0
-    _c = None
-    tol = 1
+    _f = []
+    _c = []
     rho = None
-    for f in f_desired_list:
+    f = 50
+    R = 2
+    LAMBDA = (1 + R) / R / 2
+    tol = 5
+    while tol > 0:
         F_DGC = 2 * np.pi * f  # Desired Cross-over Frequency
         print("Try: ", f, " Hz")
         fbc = ControllerDesign(o, g, nopid=NOPID, taud=TAUD, nofir=NOFIR, ts=TS, rho0=rho)
@@ -102,16 +105,16 @@ def optimize(fig, o, g, nofir=5, f_desired_list=[50 + 150 * i for i in range(10)
                 if is_robust:
                     fbc.robustcond(GAMMA)  # may need much time
                 rho = fbc.optimize()
-                _f = f
-                _c = fbc
+                _f.append(f)
+                _c.append(fbc)
                 fbc.lreset()
                 if i > 0 and check_disk(np.dot(fbc.X, fbc.rho), RM, -1):
                     print("CCCP found local minima @ iteration", i)
                     break
+            f *= R
         except:
             tol -= 1
-            if tol < 0:
-                break
+            f = f * LAMBDA
 
     for e in range(11, 0, -1):
         print((11 - e) * ' ' + e * '*')
@@ -119,12 +122,12 @@ def optimize(fig, o, g, nofir=5, f_desired_list=[50 + 150 * i for i in range(10)
     for g in range(11, 0, -1):
         print(g * ' ' + (11 - g) * '*')
 
-    assert _f > 0
-    print("Best nominal frequency:", _f, " Hz")
+    assert _f[-1] > 0
+    i_max = [i for i, f in enumerate(_f) if f == max(_f)][0]
+    print("Best nominal frequency:", _f[i_max], " Hz")
     print("PIDs:", rho[:3])
     print("FIRs:", rho[3:])
-    fbc = _c
-    assert fbc.rho[-1] == rho[-1] and fbc.rho[0] == rho[0]
+    fbc = _c[i_max]
     assert check_disk(np.dot(fbc.X, fbc.rho), RM, -1)
     mycsv.save(rho, save_name=DATA + "/rho" + str(fig) + ".csv",
                header=("P,I,D, FIR(1+n) for n in range(10)", "taud (s):" + str(TAUD), "FIR sampling (s):" + str(TS)))
