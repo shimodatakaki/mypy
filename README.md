@@ -61,36 +61,29 @@ System Identification Results.
 ![snap](images/Snap.png)
 
 
-* Feedback Controller Design: Exploiting FRF results, finding a linear FB controller that satisfies desired (given) linear constaraints for FB, 
-    i.e. (1) Gain-Crossover Linear Inequalities (self.o_dgc, self.phi_dgc),
-         (2) Phase Margin Linear Inequalities (self.theta_dpm),
-         (3) Gain Margin Linear Inequalities (self.g_dgm, self.phi_dgm),
-         (4) Second Phase Margin Linear Inequalities (self.theta_dpm2),
+* Feedback Controller Design: Exploiting FRF results, find a linear FB controller that satisfies desired (given) linear constraints for all plant perturbations,
+    i.e. (1) Gain-Crossover Linear Inequalities,
+         (2) Phase Margin Linear Inequalities,
+         (3) Gain Margin Linear Inequalities,
+         (4) Second Phase Margin Linear Inequalities,
          (5) Gain Minimum/Maximum Linear Inequalities,
-         (6) Stability Margin (Disk) Linear Inequalities via CCCP method,
+         (6) Stability Margin (Disk) Concave Inequalities via CCCP method,
          (7) Robust Stability Quadratic Inequalities (using socp or sdp),
-         (8) Other Linear/Quadratic Equalities/Inequalities.
+         (8) Nominal Performance (Disk) Concave Inequalities via CCCP method.
 Default Controller: PIDs + 10 FIRs (13 variables).
 
-![plant](images/0_plant1.png)
+![plant](images/0_plant.png)
 
 Plant FRF.
 
-![nyquist](images/4_nyquist.png)
+![nyquist](images/1_nyquist.png)
+![e_nyquist](images/1_nyquist_enlarged.png)
 
 Nyquist Plot of Optimized Open-Loop FRF.
 
-![bode](images/5_bode.png)
+![sensitivity](images/4_ST.png)
 
-Optimized Open-Loop FRF.
-
-![another_nyquist](images/4_nyquist_robust.png)
-
-Open-Loop FRF sith Robust Stability Constraint.
-
-![pid_nyquist](images/1_nyquist.png)
-
-Open-Loop FRF with only PIDs.
+Sensitivity.
 
 Copyright and License
 =============
