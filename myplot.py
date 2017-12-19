@@ -15,7 +15,7 @@ def show():
     plt.show()
 
 
-def save(leg, save_name, text=None, formats=("png",)):
+def save(fig, save_name="", leg=None, text=None, formats=("png", "pdf"), title="", xl=None, yl=None, label=None):
     """
     save figure to file if leg and save_name given
     :param leg:
@@ -23,10 +23,21 @@ def save(leg, save_name, text=None, formats=("png",)):
     :param text:
     :return:
     """
+    plt.figure(fig)
+
+    if label:
+        plt.xlabel(label[0])
+        plt.ylabel(label[1])
+    if xl:
+        plt.xlim(xl)
+    if yl:
+        plt.ylim(yl)
     if text:
         plt.text(*text)
     if leg:
         plt.legend(leg)
+    if title:
+        plt.title(title)
     if save_name:
         for f in formats:
             plt.savefig(save_name + "." + f)
@@ -50,7 +61,7 @@ def phase_bind(phase):
     return ret
 
 
-def bode(sys, fig_num, w=np.array([]), save_name=None, leg=None):
+def bode(sys, fig_num, w=np.array([])):
     """
     plot bode diagram
     :param sys:
@@ -77,35 +88,12 @@ def bode(sys, fig_num, w=np.array([]), save_name=None, leg=None):
     plt.xlabel("Frequency [Hz]")
     plt.axis('tight')
     plt.grid(True)
-    save(leg, save_name)
 
 
-def time(t, x, fig_num, text=None, label=("time [s]", "x []"), save_name=None, leg=None, lw=3, line_style="b-", xl=None, yl=None):
-    """
-    plot time scale
-    :param t:
-    :param x:
-    :param fig_num:
-    :param text:
-    :param label:
-    :param save_name:
-    :param leg:
-    :return:
-    """
-    plt.figure(fig_num)
-    plt.plot(t, x, line_style, lw=lw)
-    if xl is None:
-        plt.axis('tight')
-    else:
-        plt.xlim(xl)
-    if yl is None:
-        plt.axis('tight')
-    else:
-        plt.ylim(xl)
-    plt.xlabel(label[0])
-    plt.ylabel(label[1])
+def plot(fig, x, y, lw=3, line_style="-", plotfunc=plt.plot):
+    plt.figure(fig)
+    plotfunc(x, y, line_style, lw=lw)
     plt.grid(True)
-    save(leg, save_name, text=text)
 
 
 def scale_fft(xf, fs, N=None, yaxis="dB"):
@@ -128,7 +116,7 @@ def scale_fft(xf, fs, N=None, yaxis="dB"):
     return freq, gain, phi
 
 
-def bodeplot(freq, gain, phi, fig_num, line_style='b+', nos=2, yaxis="dB", text=None, save_name=None, leg=None, lw=3):
+def bodeplot(fig, freq, gain, phi, line_style='b-', nos=2, yaxis="dB", xl=None):
     """
     plot bode plot, given frequency, gain, and phase
     :param freq:
@@ -142,12 +130,7 @@ def bodeplot(freq, gain, phi, fig_num, line_style='b+', nos=2, yaxis="dB", text=
     :param nos:
     :return:
     """
-    plt.figure(fig_num)
-    if nos >= 1:
-        plt.subplot(211)
-        plt.semilogx(freq, gain, line_style, lw=3)
-        plt.ylabel("Gain [" + yaxis + "]")
-        plt.grid(True)
+    plt.figure(fig)
     if nos < -1 or nos > 1:
         plt.subplot(212)
         plt.semilogx(freq, phi, line_style, lw=3)
@@ -155,7 +138,15 @@ def bodeplot(freq, gain, phi, fig_num, line_style='b+', nos=2, yaxis="dB", text=
         plt.xlabel("Frequency [Hz]")
         plt.ylabel("Phase [deg]")
         plt.grid(True)
-    save(leg, save_name, text=text)
+        if xl:
+            plt.xlim(xl)
+    if nos >= 1:
+        plt.subplot(211)
+        plt.semilogx(freq, gain, line_style, lw=3)
+        plt.ylabel("Gain [" + yaxis + "]")
+        plt.grid(True)
+        if xl:
+            plt.xlim(xl)
 
 
 def FFT(x, fs, fig_num, text=None, save_name=None, leg=None):
