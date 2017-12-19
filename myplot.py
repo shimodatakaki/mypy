@@ -69,14 +69,14 @@ def bode(sys, fig_num, w=np.array([]), save_name=None, leg=None):
     plt.subplot(211)
     plt.semilogx(w / 2 / np.pi, mag, lw=3)
     plt.ylabel("Gain [dB]")
-    plt.grid()
+    plt.grid(True)
     # plt.axis('tight')
     plt.subplot(212)
     plt.semilogx(w / 2 / np.pi, phase, lw=3)
     plt.ylabel("Phase [deg]")
     plt.xlabel("Frequency [Hz]")
     plt.axis('tight')
-    plt.grid()
+    plt.grid(True)
     save(leg, save_name)
 
 
@@ -104,7 +104,7 @@ def time(t, x, fig_num, text=None, label=("time [s]", "x []"), save_name=None, l
         plt.ylim(xl)
     plt.xlabel(label[0])
     plt.ylabel(label[1])
-    plt.grid()
+    plt.grid(True)
     save(leg, save_name, text=text)
 
 
@@ -147,14 +147,14 @@ def bodeplot(freq, gain, phi, fig_num, line_style='b+', nos=2, yaxis="dB", text=
         plt.subplot(211)
         plt.semilogx(freq, gain, line_style, lw=3)
         plt.ylabel("Gain [" + yaxis + "]")
-        plt.grid()
+        plt.grid(True)
     if nos < -1 or nos > 1:
         plt.subplot(212)
         plt.semilogx(freq, phi, line_style, lw=3)
         plt.ylim(-180, 180)
         plt.xlabel("Frequency [Hz]")
         plt.ylabel("Phase [deg]")
-        plt.grid()
+        plt.grid(True)
     save(leg, save_name, text=text)
 
 

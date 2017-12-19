@@ -129,6 +129,8 @@ def solve(solver, args, G=None, h=None, A=None, b=None, Gql=[], hql=[], Gsl=[], 
         for k, v in opt.items():
             if not str(v).isalpha():
                 new_opt[k] = v * 10 ** i
+            else:
+                new_opt[k] = v
         for k, v in new_opt.items():
             solvers.options[k] = v
         if solver == "socp":
