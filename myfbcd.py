@@ -5,7 +5,7 @@ import mycvxopt
 import numpy as np
 from scipy import signal
 import mysignal
-
+import mynum
 
 class ControllerDesign():
     """
@@ -265,6 +265,10 @@ class ControllerDesign():
         return self.rho
 
     def freqresp(self):
+        """
+        return FRF of L(s)
+        :return:
+        """
         phi = np.array(self.phi)
         phi.reshape((self.F, self.NOC))
         self.rho.reshape((self.NOC, 1))
@@ -273,8 +277,36 @@ class ControllerDesign():
         return ret
 
     def lreset(self):
+        """
+        Reset linear Inequalities Condtions
+        :return:
+        """
         self.Gl = None
         self.hl = None
+
+    def split(self, n):
+        """
+        split data to n parts (into each FRF)
+        :param n:
+        :return:
+        """
+        self.olist = mynum.nsplit(self.o, n)
+        Xlist = mynum.nsplit(self.X, n)
+        self.Llist = [np.dot(X, self.rho) for X in Xlist]
+
+    def calc_gcf(self):
+        """
+        calculate acutual gain crossover frequency
+        :return:
+        """
+        gain_crossover_o = []
+        for o, l in zip(self.olist, self.Llist):
+            for _o, _l in zip(o, l):
+                if not check_disk((_l,), 1, 0):
+                    gain_crossover_o.append(temp)
+                    break
+                temp = _o
+        return np.array(gain_crossover_o) / 2 / np.pi
 
 
 class Simulation():
@@ -326,3 +358,16 @@ def fir(nofir, ts):
         return zinv
 
     return [nfir(i) for i in range(1, 1 + nofir)]
+
+
+def check_disk(l, r, sigma):
+    """
+    return if all of L(s) is out of the disk (radius:r, center:(sigma, 0))
+    :param l:
+    :param r:
+    :param sigma:
+    :return:
+    """
+
+    x, y = np.real(l), np.imag(l)
+    return all((xp - sigma) ** 2 + yp ** 2 >= r ** 2 for xp, yp in zip(x, y))
