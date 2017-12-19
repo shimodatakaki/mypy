@@ -3,6 +3,8 @@
 """
 import mycvxopt
 import numpy as np
+from scipy import signal
+import mysignal
 
 
 class ControllerDesign():
@@ -13,9 +15,9 @@ class ControllerDesign():
          (3) Gain Margin Linear Inequalities (self.g_dgm, self.phi_dgm),
          (4) Second Phase Margin Linear Inequalities (self.theta_dpm2),
          (5) Gain Minimum/Maximum Linear Inequalities,
-         (6) Stability Margin (Disk) Linear Inequalities via CCCP method,
+         (6) Stability Margin (Disk) Concave Inequalities via CCCP method,
          (7) Robust Stability Quadratic Inequalities (using socp or sdp),
-         (8) Other Linear/Quadratic Equalities/Inequalities.
+         (8) Nominal Performance (Disk) Concave Inequalities via CCCP method.
     Default Controller: PIDs + 10 FIRs (13 variables)
     Default Optimization: solver=="lp", min c.T * rho, s.t. Gl*rho <= hl, A*rho = b
     """
@@ -33,6 +35,7 @@ class ControllerDesign():
         """
         self.o = o
         self.g = g
+        self.l = [i for i in range(len(o))]
         self.F = len(o)
         self.nopid = nopid
         self.nofir = nofir
@@ -50,6 +53,7 @@ class ControllerDesign():
         # Initial solution
         if rho0 is None:
             rho0 = np.array([10 ** (-6) if i < len(nopid) else 0 for i in range(self.NOC)])
+            # rho0 = np.zeros(self.NOC)
         self.rho = rho0
 
     def specification(self, o_dgc, theta_dpm, gdb_dgm, phi_dgc=np.pi / 6, theta_dpm2=np.pi / 4, phi_dgm=np.pi / 6):
@@ -71,7 +75,7 @@ class ControllerDesign():
         self.phi_dgm = phi_dgm
         self.theta_dpm2 = theta_dpm2
 
-    def gccond(self, nlower=2):
+    def gccond(self, nlower=10):
         """
         (1) Gain Crossover Frequency Constraints:
         y <= -tan(self.phi_dgc) * x - 1/cos(self.phi_dgc)
@@ -137,7 +141,7 @@ class ControllerDesign():
         """
         if not self.l_gm:
             return False
-        self.l_pm2 = [i for i, _o in enumerate(self.o) if (max(self.l_gm) <= _o)]
+        self.l_pm2 = [i for i, _o in enumerate(self.o) if (max(self.o[j] for j in self.l_gm) <= _o)]
         Gl = np.array([- np.real(self.X[i]) for i in self.l_pm2])
         Gl.reshape((len(self.l_pm2), self.NOC))
         hl = np.ones((len(Gl), 1)) * np.cos(self.theta_dpm2)
@@ -145,13 +149,13 @@ class ControllerDesign():
 
     def gaincond(self, glower=0., nocon=3):
         """
-        (5) Kp, Ki, Kd > 0
+        (5) any(rho[:len(nopid)] > 0) == True, and sum(rho[nofir:]) > 0 == True
         :param glower:
         :param nocon:
         :return:
         """
         Gl = np.zeros((nocon + 1 * (self.nofir > 0), self.NOC))
-        for i in range(nocon + 1):
+        for i in range(len(Gl)):
             if i < nocon:
                 Gl[i][i] = -1.
             else:
@@ -163,8 +167,8 @@ class ControllerDesign():
     def stabilitycond(self, rm, sigma=-1):
         """
         (6) Stability Constaints:
-        (x-sigma)^2 + y^2 >= rm^2
-        for o >> o_dgc
+        (x-sigma)**2 + y**2 >= rm**2
+        for all o
         This condition is CONCAVE, so convex solvers cannot deal with it.
         Here, CCCP (Concave-Convex Procedure) is applied to make it convex via Taylor expansion, i.e.
           f(xt) - g(xt) >>> f(xt) - g(xt-1) - dg(xt-1)/dxt-1.T * (xt - xt-1),
@@ -176,15 +180,32 @@ class ControllerDesign():
         :return:
         """
         assert - sigma >= rm
-        if not self.l_gm:
-            return False
-        self.l_stb = [i for i, _o in enumerate(self.o) if (max(self.l_gm) <= _o)]
+        self.l_stb = self.l
         L0 = np.dot(self.X, self.rho)
         n = L0 - sigma
-        Gl = np.array([- np.real(np.conj(n[i]) * self.X[i]) / np.absolute(n[i]) for i in self.l_pm2])
-        Gl.reshape((len(self.l_pm2), self.NOC))
+        Gl = np.array([- np.real(np.conj(n[i]) * self.X[i]) / np.absolute(n[i]) for i in self.l_stb])
+        Gl.reshape((len(self.l_stb), self.NOC))
         hl = np.array([-rm - np.real(n[i]) / np.absolute(n[i]) * sigma
-                       for i in self.l_pm2]).reshape((len(self.l_pm2), 1)) * np.ones((len(self.l_pm2), 1))
+                       for i in self.l_stb]).reshape((len(self.l_stb), 1)) * np.ones((len(self.l_stb), 1))
+        self.lcond_append(Gl, hl)
+
+    def nominalcond(self, db=-40):
+        """
+        (8) Nominal Performance Constraints:
+        (x-1)**2 + y**2 >= |W1(s)|, where W1(s) = (self.o_dgc/s) ** m
+        for all o
+        This condtion is also concave as stabilitycond, so it also uses CCCP.
+        Default nominal sensitivity is -40 dB to suppress lower frequency disturbance.
+        :param db:
+        :return:
+        """
+        L0 = np.dot(self.X, self.rho)
+        n = L0 + 1
+        Gl = np.array([- np.real(np.conj(n[i]) * self.X[i]) / np.absolute(n[i]) for i in self.l])
+        Gl.reshape((len(self.l), self.NOC))
+        m = db / (-20)
+        hl = np.array([- (self.o_dgc / self.o[i]) ** m + np.real(n[i]) / np.absolute(n[i])
+                       for i in self.l]).reshape((len(self.l), 1)) * np.ones((len(self.l), 1))
         self.lcond_append(Gl, hl)
 
     def set_obj(self, c):
@@ -254,6 +275,18 @@ class ControllerDesign():
     def lreset(self):
         self.Gl = None
         self.hl = None
+
+
+class Simulation():
+    def __init__(self, s, plant, controller):
+        l = plant * controller
+        t = l / (1 + l)
+        self.T = mysignal.symbolic_to_tf(t, s)
+        self.S = 1 - self.T
+
+    def step(self):
+        t, yout = signal.step2(self.T)
+        return t, yout
 
 
 def pid(nopid, taud):
