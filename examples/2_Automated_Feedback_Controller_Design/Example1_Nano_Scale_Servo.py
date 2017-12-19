@@ -9,6 +9,7 @@ import myplot
 import mycvxopt
 import mysignal
 import mycsv
+import mynum
 
 DATA = "data"
 F = 800  # number of FRF lines
@@ -104,6 +105,9 @@ def optimize(fig, o, g, nofir=5, f_desired_list=[50 + 150 * i for i in range(10)
                 _f = f
                 _c = fbc
                 fbc.lreset()
+                if i > 0 and check_disk(np.dot(fbc.X, fbc.rho), RM, -1):
+                    print("CCCP found local minima @ iteration", i)
+                    break
         except:
             tol -= 1
             if tol < 0:
@@ -116,20 +120,29 @@ def optimize(fig, o, g, nofir=5, f_desired_list=[50 + 150 * i for i in range(10)
         print(g * ' ' + (11 - g) * '*')
 
     assert _f > 0
-    print("Best cross-over frequency:", _f, " Hz")
+    print("Best nominal frequency:", _f, " Hz")
     print("PIDs:", rho[:3])
     print("FIRs:", rho[3:])
     fbc = _c
     assert fbc.rho[-1] == rho[-1] and fbc.rho[0] == rho[0]
+    assert check_disk(np.dot(fbc.X, fbc.rho), RM, -1)
     mycsv.save(rho, save_name=DATA + "/rho" + str(fig) + ".csv",
                header=("P,I,D, FIR(1+n) for n in range(10)", "taud (s):" + str(TAUD), "FIR sampling (s):" + str(TS)))
+
     N = 5  # number of data
+    fbc.split(N)
+    olist = fbc.olist
+    Llist = fbc.Llist
+    gcf = fbc.calc_gcf()
+    print("Gain Crossover Frequencies (Hz):", gcf)
+    print("\tMin. (Hz):", min(gcf))
+    print("\tAve. (Hz):", np.mean(gcf))
+    print("\tMax. (Hz):", max(gcf))
+    _f = min(gcf)
 
     ##########Plot1##########
     fig += 1
-    for j in range(N):
-        L = np.dot(fbc.X[j * F:(j + 1) * F], fbc.rho)
-
+    for L in Llist:
         # Nyquist
         myplot.plot(fig, np.real(L), np.imag(L), lw=6, line_style="-")
 
@@ -153,8 +166,7 @@ def optimize(fig, o, g, nofir=5, f_desired_list=[50 + 150 * i for i in range(10)
     ##########Plot2##########
     fig += 1
     # L(s)
-    for j in range(N):
-        L = np.dot(fbc.X[j * F:(j + 1) * F], fbc.rho)
+    for L in Llist:
         myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(L)), np.angle(L, deg=True), line_style='-')
     myplot.save(fig, save_name=DATA + "/" + str(fig) + "_bode", title="Openloop L(s)",
                 leg=["L" + str(k) for k in range(N)])
@@ -167,8 +179,7 @@ def optimize(fig, o, g, nofir=5, f_desired_list=[50 + 150 * i for i in range(10)
 
     ##########Plot4##########
     fig += 1
-    for j in range(N):
-        L = np.dot(fbc.X[j * F:(j + 1) * F], fbc.rho)
+    for L in Llist:
         T = 1 / (1 + L)
         S = 1 - T
         myplot.plot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(T)), line_style='b-', plotfunc=plt.semilogx)
