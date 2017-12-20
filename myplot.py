@@ -61,7 +61,7 @@ def phase_bind(phase):
     return ret
 
 
-def bode(sys, fig_num, w=np.array([])):
+def bode(fig_num, sys, w=np.array([])):
     """
     plot bode diagram
     :param sys:
@@ -149,7 +149,7 @@ def bodeplot(fig, freq, gain, phi, line_style='b-', nos=2, yaxis="dB", xl=None):
             plt.xlim(xl)
 
 
-def FFT(x, fs, fig_num, text=None, save_name=None, leg=None):
+def FFT(fig_num, x, fs, line_style="r+"):
     """
     plot FFT results of signal
     :param x:
@@ -162,4 +162,4 @@ def FFT(x, fs, fig_num, text=None, save_name=None, leg=None):
     """
     xf = fft(x)
     freq, gain, phi = scale_fft(xf, fs)
-    bodeplot(freq, gain, phi, fig_num, text=text, save_name=save_name, leg=leg)
+    bodeplot(fig_num, freq, gain, phi, line_style="r+")

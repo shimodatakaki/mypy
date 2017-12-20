@@ -168,8 +168,9 @@ class Simulation():
             noise = np.random.rand(len(self.t)) * noise_level * max(self.y)
         self.y += noise
         mycsv.save(self.t, self.u, self.y, save_name=self.path + output_csv, header=("t", "u", "y"))
-        myplot.time(self.t, self.u, fig_num)
-        myplot.time(self.t, self.y, fig_num, label=("time [s]", "u/y []"),
+        myplot.plot(fig_num, self.t, self.u)
+        myplot.plot(fig_num, self.t, self.y)
+        myplot.save(fig_num, label=("time [s]", "u/y []"),
                     save_name=self.path + "Simulation_Result", leg=("u", "y"))
 
 
@@ -259,7 +260,7 @@ class SystemIdentification():
         :return:
         """
         assert old.f_lines[-1] <= self.f_lines[0]
-        #signal
+        # signal
         self.f_lines = np.append(old.f_lines, self.f_lines)
         self.o_lines = np.append(old.o_lines, self.o_lines)
         self.nof += old.nof
@@ -267,7 +268,7 @@ class SystemIdentification():
         self.uy_av_f = old.uy_av_f
         old.uy_cov_f.extend(self.uy_cov_f)
         self.uy_cov_f = old.uy_cov_f
-        #noise
+        # noise
         self.non += old.non
         old.uy_noise_f.extend(self.uy_noise_f)
         self.uy_noise_f = old.uy_noise_f
