@@ -31,12 +31,12 @@ def excitation_design(fig):
 
         ext.multisine()
         fig += 1
-        myplot.time(ext.t, ext.u, fig,
-                    label=("time [s]", "x []"), save_name=path + "non_optimized_multisine", leg=("multisine",),
+        myplot.plot(fig, ext.t, ext.u)
+        myplot.save(fig, label=("time [s]", "x []"), save_name=path + "non_optimized_multisine", leg=("multisine",),
                     text=(ext.t[-1] * 0.25, 1 * 1.1, "CREST FACTOR = " + str(ext.crest)))
         fig += 1
-        myplot.FFT(ext.u, ext.fs, fig,
-                   save_name=path + "FFT_of_non_optimized_multisine", leg=("FFT",))
+        myplot.FFT(fig, ext.u, ext.fs)
+        myplot.save(fig, save_name=path + "FFT_of_non_optimized_multisine", leg=("FFT",))
 
         print("Optimizing random phase multisine")
         ext.optimize()
@@ -44,12 +44,12 @@ def excitation_design(fig):
         ext.save_to_h()
 
         fig += 1
-        myplot.time(ext.t, ext.u, fig,
-                    label=("time [s]", "x []"), save_name=path + "optimized_multisine", leg=("multisine",),
+        myplot.plot(fig, ext.t, ext.u)
+        myplot.save(fig, label=("time [s]", "x []"), save_name=path + "optimized_multisine", leg=("multisine",),
                     text=(ext.t[-1] * 0.25, 1 * 1.1, "CREST FACTOR = " + str(ext.crest)))
         fig += 1
-        myplot.FFT(ext.u, ext.fs, fig,
-                   save_name=path + "FFT_of_optimized_multisine", leg=("FFT",))
+        myplot.FFT(fig, ext.u, ext.fs)
+        myplot.save(fig, save_name=path + "FFT_of_optimized_multisine", leg=("FFT",))
     return fig
 
 
@@ -89,10 +89,11 @@ def system_identification(fig, plant):
 
     fig += 1
     freq, gain, phi = sys_id.fap_data()
-    myplot.bodeplot(freq, gain, phi, fig, line_style='b-')
+    myplot.bodeplot(fig, freq, gain, phi, line_style='b-')
     freq, gain, phi = sys_id.fap_data("noise")
-    myplot.bodeplot(freq, gain, phi, fig, line_style='r+', nos=1, save_name=DATA_PATH + "bode_result",
-                    leg=("Signal", "Estimated_Noise"))
+    myplot.bodeplot(fig, freq, gain, phi, line_style='r+', nos=1)
+    myplot.save(fig, save_name=DATA_PATH + "bode_result",
+                leg=("Signal", "Estimated_Noise"))
 
     print("f_lines:")
     print(sys_id.f_lines)
@@ -118,20 +119,17 @@ def system_identification(fig, plant):
 
     fig += 1
     freq, gain, phi = sys_id.fap_data()
-    myplot.bodeplot(freq, gain, phi, fig, line_style='b-')
-    myplot.bode(P_true, fig, w=sys_id.o_lines)
-    myplot.bode(P_lls, fig, w=sys_id.o_lines)
-    myplot.bode(P_iwls, fig, w=sys_id.o_lines)
-    myplot.bode(P_nls, fig, w=sys_id.o_lines)
-    myplot.bode(P_mle, fig, w=sys_id.o_lines)
+    myplot.bodeplot(fig, freq, gain, phi, line_style='b-')
+    myplot.bode(fig, P_true, w=sys_id.o_lines)
+    myplot.bode(fig, P_lls, w=sys_id.o_lines)
+    myplot.bode(fig, P_iwls, w=sys_id.o_lines)
+    myplot.bode(fig, P_nls, w=sys_id.o_lines)
+    myplot.bode(fig, P_mle, w=sys_id.o_lines)
     freq, gain, phi = sys_id.fap_data("noise")
-    myplot.bodeplot(freq, gain, phi, fig, line_style='r+', nos=1,
-                    save_name=DATA_PATH + "System_Identification_from_"
-                              + str(min(F_RANGE[0])) + "_Hz_to_" + str(max(F_RANGE[1])) + "_Hz",
-                    leg=("Signal", "P_true", "P_lls", "P_iwls", "P_nls", "P_mle", "Estimated_Noise"))
-
-    myplot.show()
-
+    myplot.bodeplot(fig, freq, gain, phi, line_style='r+', nos=1)
+    myplot.save(fig, save_name=DATA_PATH + "System_Identification_from_" + str(min(F_RANGE[0])) + "_Hz_to_" + str(
+        max(F_RANGE[1])) + "_Hz",
+                leg=("Signal", "P_true", "P_lls", "P_iwls", "P_nls", "P_mle", "Estimated_Noise"))
     return fig
 
 
@@ -153,9 +151,11 @@ def main(plant="r"):
     P_TRUE = mysignal.symbolic_to_tf(P, s)
 
     fig = 0
-    fig = excitation_design(fig)
-    fig = simulation_with_output_noise(fig, plant=P_TRUE)
+    # fig = excitation_design(fig)
+    # fig = simulation_with_output_noise(fig, plant=P_TRUE)
     fig = system_identification(fig, plant=P_TRUE)
+
+    myplot.show()
 
 
 if __name__ == "__main__":
