@@ -26,23 +26,23 @@ def main():
     ext.multisine()
 
     fig += 1
-    myplot.time(ext.t, ext.u, fig,
-                label=("time [s]", "x []"), save_name=path + "non_optimized_multisine", leg=("multisine",),
+    myplot.plot(fig, ext.t, ext.u)
+    myplot.save(fig, label=("time [s]", "x []"), save_name=path + "non_optimized_multisine", leg=("multisine",),
                 text=(ext.t[-1] * 0.25, 1 * 1.1, "CREST FACTOR = " + str(ext.crest)))
     fig += 1
-    myplot.FFT(ext.u, ext.fs, fig,
-               save_name=path + "FFT_of_non_optimized_multisine", leg=("FFT",))
+    myplot.FFT(fig, ext.u, ext.fs)
+    myplot.save(fig, save_name=path + "FFT_of_non_optimized_multisine", leg=("FFT",))
 
     print("Optimizing random phase multisine")
     ext.optimize(PP_MAX=7)
 
     fig += 1
-    myplot.time(ext.t, ext.u, fig,
-                label=("time [s]", "x []"), save_name=path + "optimized_multisine", leg=("multisine",),
+    myplot.plot(fig, ext.t, ext.u)
+    myplot.save(fig, label=("time [s]", "x []"), save_name=path + "optimized_multisine", leg=("multisine",),
                 text=(ext.t[-1] * 0.25, 1 * 1.1, "CREST FACTOR = " + str(ext.crest)))
     fig += 1
-    myplot.FFT(ext.u, ext.fs, fig,
-               save_name=path + "FFT_of_optimized_multisine", leg=("FFT",))
+    myplot.FFT(fig, ext.u, ext.fs)
+    myplot.save(fig, save_name=path + "FFT_of_optimized_multisine", leg=("FFT",))
 
 
 if __name__ == "__main__":
