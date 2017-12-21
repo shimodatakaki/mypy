@@ -15,15 +15,14 @@ class ControllerDesign():
          (2) Phase Margin Linear Inequalities (self.theta_dpm),
          (3) Gain Margin Linear Inequalities (self.g_dgm, self.phi_dgm),
          (4) Second Phase Margin Linear Inequalities (self.theta_dpm2),
-         (5) Gain Minimum/Maximum Linear Inequalities,
+         (5) Gain Minimum/Maximum Linear Equalities/Inequalities,
          (6) Stability Margin (Disk) Concave Inequalities via CCCP method,
          (7) Robust Stability Quadratic Inequalities (using socp or sdp),
          (8) Nominal Performance (Disk) Concave Inequalities via CCCP method.
-    Default Controller: PIDs + 10 FIRs (13 variables)
-    Default Optimization: solver=="lp", min c.T * rho, s.t. Gl*rho <= hl, A*rho = b
+    Default Controller: PIDs + 50 FIRs (53 variables)
     """
 
-    def __init__(self, o, g, nopid="pid", taud=0.001, nofir=10, ts=0.001, rho0=None):
+    def __init__(self, o, g, nopid="pid", taud=0.01, nofir=10, ts=0.001, tsfir=0.001, rho0=None):
         """
         L = P*C = X*rho, where X = g*phi.T. phi:Basis FRF of controller, rho:Controller parameters.
         x, y = real(L), imag(L)
@@ -41,16 +40,13 @@ class ControllerDesign():
         self.nopid = nopid
         self.nofir = nofir
         self.NOC = len(nopid) + nofir
-        self.phi = [np.array([*[c(_o) for c in pid(nopid, taud=taud)], *[c(_o) for c in fir(nofir=nofir, ts=ts)]])
-                    for _o in o]
+        self.phi = [
+            np.array([*[c(_o) for c in pid(nopid, taud=taud, ts=ts)], *[c(_o) for c in fir(nofir=nofir, ts=tsfir)]])
+            for _o in o]
         self.X = np.array([_g * _phi for _g, _phi in zip(g, self.phi)])
         self.X.reshape((self.F, self.NOC))
         # Objective function and linear inequalties for optimization
-        self.c = np.zeros((self.NOC, 1))  # default FIND
-        self.c.reshape((self.NOC, 1))
-        self.Gl, self.hl = None, None
-        self.Gql, self.hql = [], []
-        self.Gsl, self.hsl = [], []
+        self.reset()
         # Initial solution
         if rho0 is None:
             rho0 = np.array([10 ** (-6) if i < len(nopid) else 0 for i in range(self.NOC)])
@@ -75,6 +71,13 @@ class ControllerDesign():
         self.g_dgm = g_dgm
         self.phi_dgm = phi_dgm
         self.theta_dpm2 = theta_dpm2
+
+        # A circle that satisfies Gain Margin, Phase Margin, and Second Phase Margin.
+        tm = max(theta_dpm, theta_dpm2)
+        xg = -1 / g_dgm
+        xp, yp = -np.cos(tm), -np.sin(tm)
+        self.sigma = 1 / 2 * (xg ** 2 - 1) / (xg - xp)
+        self.rm = xg - self.sigma
 
     def gccond(self, nlower=10):
         """
@@ -148,21 +151,31 @@ class ControllerDesign():
         hl = np.ones((len(Gl), 1)) * np.cos(self.theta_dpm2)
         self.lcond_append(Gl, hl)
 
-    def gaincond(self, glower=0., nocon=3):
+    def gainpositivecond(self, glower=0.):
         """
         (5) any(rho[:len(nopid)] > 0) == True, and sum(rho[nofir:]) > 0 == True
         :param glower:
         :param nocon:
         :return:
         """
-        Gl = np.zeros((nocon + 1 * (self.nofir > 0), self.NOC))
+        nocon = len(self.nopid)
+        Gl = np.zeros((nocon, self.NOC))
         for i in range(len(Gl)):
             if i < nocon:
                 Gl[i][i] = -1.
-            else:
-                for j in range(nocon, self.NOC):
-                    Gl[i][j] = -1.  # sum of FIR should be positive
-        hl = - glower * np.ones((nocon + 1 * (self.nofir > 0), 1))
+        hl = - glower * np.ones((nocon, 1))
+        self.lcond_append(Gl, hl)
+
+    def picond(self, ti=50 * 10 ** (-3)):
+        """
+        (5) Kp - taui * Ki < 0
+        :param ti:Integral Time
+        :return:
+        """
+        Gl = np.zeros((1, self.NOC))
+        Gl[0][0] = 1
+        Gl[0][1] = - ti
+        hl = 0 * np.ones((1, 1))
         self.lcond_append(Gl, hl)
 
     def outofdiskcond(self, r, sigma, l=None):
@@ -190,7 +203,7 @@ class ControllerDesign():
                        for i in l]).reshape((len(l), 1)) * np.ones((len(l), 1))
         self.lcond_append(Gl, hl)
 
-    def stabilitycond(self, rm, sigma=-1):
+    def stabilitycond(self, rm=None, sigma=None):
         """
         (6) Stability Constaints:
         (x-sigma)**2 + y**2 >= rm**2
@@ -199,6 +212,10 @@ class ControllerDesign():
         :param sigma: center of stability disk
         :return:
         """
+        if rm is None:
+            rm = self.rm
+        if sigma is None:
+            sigma = self.sigma
         assert - sigma >= rm
         r = rm * np.ones(len(self.l))
         self.outofdiskcond(r, sigma)
@@ -260,6 +277,40 @@ class ControllerDesign():
             self.Gql.append(gq0)
             self.hql.append(hq0)
 
+    def econd_append(self, A, b):
+        """
+        Append condtion to Gl and hl
+        :param Gl:
+        :param hl:
+        :return:
+        """
+        if self.A is None:
+            self.A = A
+            self.b = b
+        else:
+            self.A = np.block([[self.A], [A]])
+            self.b = np.block([[self.b], [b]])
+
+    def fircond(self):
+        """
+        (5) FIRs = 0 @ o=0 and o=pi/ts
+        :return:
+        """
+        # sum( (-1)**i * ai ) == 0
+        A = np.zeros((1, self.NOC))
+        for i in range(self.NOC):
+            if i >= len(self.nopid):
+                A[0][i] = (-1) ** (i - len(self.nopid) + 1)
+        b = 0 * np.ones(1)
+        self.econd_append(A, b)
+        # sum( ai ) == 0
+        A = np.zeros((1, self.NOC))
+        for i in range(self.NOC):
+            if i >= len(self.nopid):
+                A[0][i] = 1
+        b = 0 * np.ones(1)
+        self.econd_append(A, b)
+
     def optimize(self, solver="socp"):
         """
         Available Solvers: Linear Programming (of course including min infinity-norm/1-norm), Quadratic Prgramming,
@@ -268,13 +319,12 @@ class ControllerDesign():
         :return:
         """
         self.rho = mycvxopt.solve(solver, [self.c], G=self.Gl, h=self.hl, Gql=self.Gql, hql=self.hql, Gsl=self.Gsl,
-                                  hsl=self.hsl, MAX_ITER_SOL=1)
+                                  hsl=self.hsl, A=self.A, b=self.b, MAX_ITER_SOL=1)
         return self.rho
 
     def freqresp(self):
         """
-        return FRF of L(s)
-        :return:
+        return FRF of C(s)
         """
         phi = np.array(self.phi)
         phi.reshape((self.F, self.NOC))
@@ -283,13 +333,17 @@ class ControllerDesign():
         assert ret.shape == (self.F,)
         return ret
 
-    def lreset(self):
+    def reset(self):
         """
         Reset linear Inequalities Condtions
         :return:
         """
-        self.Gl = None
-        self.hl = None
+        self.c = np.zeros((self.NOC, 1))  # default FIND
+        self.c.reshape((self.NOC, 1))
+        self.Gl, self.hl = None, None
+        self.Gql, self.hql = [], []
+        self.Gsl, self.hsl = [], []
+        self.A, self.b = None, None
 
     def split(self, n):
         """
@@ -328,7 +382,7 @@ class Simulation():
         return t, yout
 
 
-def pid(nopid, taud):
+def pid(nopid, taud, ts=0.0):
     """
     return [P(o), I(o), D(o)]
     :param nopid: "p" if P, "pi" if pi, "pid" if pid, "pd" if pd
@@ -340,10 +394,20 @@ def pid(nopid, taud):
         return 1
 
     def i(o):
-        return 1 / (1.j * o)
+        s = 1.j * o
+        if ts == 0:
+            return 1 / s
+        else:
+            zi = np.exp(- ts * s)
+            return -(ts * (zi + 1)) / (2 * (zi - 1))
 
     def d(o):
-        return 1.j * o / (1 + taud * 1.j * o)
+        s = 1.j * o
+        if ts == 0:
+            return s / (1 + taud * s)
+        else:
+            zi = np.exp(-ts * s)
+            return -(2 * (zi - 1)) / (2 * taud + ts - 2 * taud * zi + ts * zi)
 
     pid_controller = {"p": p, "i": i, "d": d}
     return [pid_controller[t] for t in nopid.lower()]
@@ -360,7 +424,9 @@ def fir(nofir, ts):
 
     def nfir(n):
         def zinv(o):
-            return np.exp(- ts * 1.j * o * n)
+            s = 1.j * o
+            zi = np.exp(- ts * s)
+            return zi ** (n)
 
         return zinv
 
