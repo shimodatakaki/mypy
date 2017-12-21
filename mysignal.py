@@ -1,5 +1,6 @@
 from scipy import signal
 from sympy import *
+import numpy as np
 
 
 class MyTransferFunction():
@@ -22,7 +23,13 @@ def zoh_compensation(tau, w):
     return p.freqresp(w)
 
 
-def symbolic_to_tf(expr, symbol):
+def zoh_w_delay(o, ts, td=0):
+    return np.array([
+                        (1 - np.exp(-1.j * _o * ts)) / (1.j * _o * ts) * np.exp(-1.j * _o * td)
+         for _o in o])
+
+
+def symbolic_to_tf(expr, symbol, ts=0.0):
     """
 
     :param expr:P('s')
@@ -37,7 +44,12 @@ def symbolic_to_tf(expr, symbol):
         except ComputationFailed:
             degrees.append(0)  # only coefficients
     a_nd = [[float(x.coeff(symbol, i)) for i in range(degrees[i] + 1)][::-1] for i, x in enumerate(nd)]
-    return signal.TransferFunction(*a_nd)
+    if ts == 0:
+        return signal.TransferFunction(*a_nd)
+    else:
+        n, d, ts = signal.cont2discrete(a_nd, dt=ts)
+        p = signal.TransferFunction([x for x in n[0] if not x == 0], [x for x in d if not x == 0], dt=ts)
+        return p
 
 
 def array_to_eq(a, x):
