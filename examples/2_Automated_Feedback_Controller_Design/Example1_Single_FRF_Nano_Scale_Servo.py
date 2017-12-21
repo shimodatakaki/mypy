@@ -8,6 +8,7 @@ import myplot
 import mysignal
 import mycsv
 from scipy import signal
+import matplotlib.pyplot as plt
 
 DATA = "data"
 F = 1000  # number of FRF lines
@@ -135,9 +136,10 @@ def plotall(fig, fbc, ndata=NDATA):
     :param fig:
     :return:
     """
-    fbc.split(NDATA)
+    fbc.split(ndata)
     olist = fbc.olist
-    F = len(olist[0])
+    o = olist[0]
+    F = len(o)
     Llist = fbc.Llist
     gcf = fbc.calc_gcf()
     print("Gain Crossover Frequencies (Hz):", gcf)
@@ -162,12 +164,12 @@ def plotall(fig, fbc, ndata=NDATA):
                 (0, - np.sin(fbc.theta_dpm), np.sin(fbc.theta_dpm2)),
                 line_style="yo")
     myplot.save(fig, xl=[-1, 1], yl=[-1, 1],
-                leg=(*["Nyquist" + str(k) for k in range(NDATA)], "r=1", "Origin", "(-1,j0)", "Stb. Cond.", "Margins"),
+                leg=(*["Nyquist" + str(k) for k in range(ndata)], "r=1", "Origin", "(-1,j0)", "Stb. Cond.", "Margins"),
                 label=("Re", "Im"), save_name=DATA + "/" + str(fig) + "_nyquist_enlarged",
                 title="Optimized Gain-Crossover Frequency (Hz): " + str(f_gc))
 
     myplot.save(fig, xl=[-3, 3], yl=[-3, 3],
-                leg=(*["Nyquist" + str(k) for k in range(NDATA)], "r=1", "Origin", "(-1,j0)", "Stb. Cond.", "Margins"),
+                leg=(*["Nyquist" + str(k) for k in range(ndata)], "r=1", "Origin", "(-1,j0)", "Stb. Cond.", "Margins"),
                 label=("Re", "Im"), save_name=DATA + "/" + str(fig) + "_nyquist",
                 title="Optimized Gain-Crossover Frequency (Hz): " + str(f_gc))
 
@@ -178,7 +180,7 @@ def plotall(fig, fbc, ndata=NDATA):
         myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(L)), np.angle(L, deg=True),
                         line_style='-')
     myplot.save(fig, save_name=DATA + "/" + str(fig) + "_bode", title="Openloop L(s)",
-                leg=["L" + str(k) for k in range(NDATA)])
+                leg=["L" + str(k) for k in range(ndata)])
 
     ##########Plot3##########
     fig += 1
@@ -206,7 +208,6 @@ def plotall(fig, fbc, ndata=NDATA):
 if __name__ == "__main__":
     from sympy import *
     import os
-    import matplotlib.pyplot as plt
 
     try:
         os.mkdir(DATA)
