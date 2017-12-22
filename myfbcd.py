@@ -22,7 +22,7 @@ class ControllerDesign():
     Default Controller: PIDs + 50 FIRs (53 variables)
     """
 
-    def __init__(self, o, g, nopid="pid", taud=0.01, nofir=10, ts=0.001, tsfir=0.001, rho0=None):
+    def __init__(self, o, g, nopid="pid", taud=0.01, nofir=10, ts=0.001, tsfir=0.001, rho0=None, is_notch=False):
         """
         L = P*C = X*rho, where X = g*phi.T. phi:Basis FRF of controller, rho:Controller parameters.
         x, y = real(L), imag(L)
@@ -40,10 +40,12 @@ class ControllerDesign():
         self.nopid = nopid
         self.nofir = nofir
         self.NOC = len(nopid) + nofir
-        self.phi = [
-            np.array([*[c(_o) for c in pid(nopid, taud=taud, ts=ts)], *[c(_o) for c in fir(nofir=nofir, ts=tsfir)]])
-            for _o in o]
+        self.phi = np.array([
+            np.array([*[c(_o) for c in pid(nopid, taud=taud, ts=ts)],
+                      *[c(_o) for c in fir(nofir=nofir, ts=tsfir, is_notch=is_notch)]])
+            for _o in o])
         self.X = np.array([_g * _phi for _g, _phi in zip(g, self.phi)])
+        self.phi.reshape((self.F, self.NOC))
         self.X.reshape((self.F, self.NOC))
         # Objective function and linear inequalties for optimization
         self.reset()
@@ -291,25 +293,23 @@ class ControllerDesign():
             self.A = np.block([[self.A], [A]])
             self.b = np.block([[self.b], [b]])
 
-    def fircond(self):
+    def fircond(self, term=0):
         """
-        (5) FIRs = 0 @ o=0 and o=pi/ts
+        (5) FIRs = term @ o=0 and o=pi/ts
+        EQUIV sum(a[i] for i in even) == term and sum(a[i] for i in odd) == term
         :return:
         """
-        # sum( (-1)**i * ai ) == 0
-        A = np.zeros((1, self.NOC))
-        for i in range(self.NOC):
-            if i >= len(self.nopid):
-                A[0][i] = (-1) ** (i - len(self.nopid) + 1)
-        b = 0 * np.ones(1)
-        self.econd_append(A, b)
-        # sum( ai ) == 0
-        A = np.zeros((1, self.NOC))
-        for i in range(self.NOC):
-            if i >= len(self.nopid):
-                A[0][i] = 1
-        b = 0 * np.ones(1)
-        self.econd_append(A, b)
+        # sum( (-1)**i * ai ) == term and sum( ai ) == term
+        EVEN = 0
+        ODD = 1
+        for j in (EVEN, ODD):
+            A = np.zeros((1, self.NOC))
+            for i in range(self.NOC):
+                k = i - len(self.nopid)
+                if k >= 0 and (k + j) % 2:
+                    A[0][i] = 1
+            b = term * np.ones(1)
+            self.econd_append(A, b)
 
     def optimize(self, solver="socp"):
         """
@@ -322,14 +322,30 @@ class ControllerDesign():
                                   hsl=self.hsl, A=self.A, b=self.b, MAX_ITER_SOL=1)
         return self.rho
 
-    def freqresp(self):
+    def freqresp(self, obj="c"):
         """
-        return FRF of C(s)
+        return FRF of C(s), CPID(s), or CFIR(s)
         """
-        phi = np.array(self.phi)
-        phi.reshape((self.F, self.NOC))
-        self.rho.reshape((self.NOC, 1))
-        ret = np.dot(self.phi, self.rho)
+        if obj=="c":
+            noc = self.NOC
+            phi = np.array(self.phi)
+            rho = np.array(self.rho)
+        elif obj==self.nopid:
+            noc = len(self.nopid)
+            phi = np.array([
+               self.phi[i][:noc] for i in range(self.F)
+            ])
+            rho = np.array(self.rho[:noc])
+        elif obj == "fir":
+            noc = self.nofir
+            phi = np.array([
+               self.phi[i][-self.nofir:] for i in range(self.F)
+            ])
+            rho = np.array(self.rho[-self.nofir:])
+
+        phi.reshape((self.F, noc))
+        rho.reshape((noc, 1))
+        ret = np.dot(phi, rho)
         assert ret.shape == (self.F,)
         return ret
 
@@ -413,24 +429,36 @@ def pid(nopid, taud, ts=0.0):
     return [pid_controller[t] for t in nopid.lower()]
 
 
-def fir(nofir, ts):
+def fir(nofir, ts, is_notch=False):
     """
-    return [z^-1 (o), z^-2 (o), ..., z^-nofir (o)]
+    return [z^-1 (o), z^-2 (o), ..., z^-nofir (o)] if not is_notch (PARALLEL TYPE)
+    else return [CFIR0(z), ..., CFIRnofr(z) ], where CFIRi(z) = (1+z**(-i))/2
     where z = exp(ts*s)
     :param nofir: number of FIR filters
     :param ts:
     :return:
     """
 
-    def nfir(n):
-        def zinv(o):
-            s = 1.j * o
-            zi = np.exp(- ts * s)
-            return zi ** (n)
+    if not is_notch:
+        def nfir(n):
+            def zinv(o):
+                s = 1.j * o
+                zi = np.exp(- ts * s)
+                return zi ** (n)
 
-        return zinv
+            return zinv
 
-    return [nfir(i) for i in range(1, 1 + nofir)]
+        return [nfir(i) for i in range(1, 1 + nofir)]
+    else:
+        def nfirnotch(n):
+            def firnotch(o):
+                s = 1.j * o
+                zi = np.exp(- ts * s)
+                return (zi ** (n) + 1) / 2
+
+            return firnotch
+
+        return [nfirnotch(i) for i in range(nofir)]
 
 
 def check_disk(l, r, sigma):

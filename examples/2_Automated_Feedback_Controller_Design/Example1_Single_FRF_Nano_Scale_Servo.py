@@ -186,7 +186,9 @@ def plotall(fig, fbc, ndata=NDATA):
     fig += 1
     c = fbc.freqresp()[:F]
     myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(c)), np.angle(c, deg=True), line_style='-')
-    myplot.save(fig, title='C(s)')
+    g = fbc.g[:F]
+    myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(g)), np.angle(g, deg=True), line_style='-')
+    myplot.save(fig, title='C(s)', leg=("Controller", "Plant"))
 
     ##########Plot4##########
     fig += 1
@@ -201,6 +203,14 @@ def plotall(fig, fbc, ndata=NDATA):
         ylower.append(min(20 * np.log10(abs(S))))
     myplot.save(fig, save_name=DATA + "/" + str(fig) + "_ST", title="S(s) (Blue) and T(s) (Red).", leg=("Nominal",),
                 yl=(min(ylower), 10))
+
+    ##########Plot5##########
+    fig += 1
+    c = fbc.freqresp(obj="pid")[:F]
+    myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(c)), np.angle(c, deg=True), line_style='-')
+    c = fbc.freqresp(obj="fir")[:F]
+    myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(c)), np.angle(c, deg=True), line_style='-')
+    myplot.save(fig, title='Controllers', leg=("PID", "FIR"))
 
     return fig
 
