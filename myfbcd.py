@@ -41,12 +41,13 @@ class ControllerDesign():
         self.nofir = nofir
         self.NOC = len(nopid) + nofir
         self.phi = np.array([
-            np.array([*[c(_o) for c in pid(nopid, taud=taud, ts=ts)],
-                      *[c(_o) for c in fir(nofir=nofir, ts=tsfir, is_notch=is_notch)]])
-            for _o in o])
+                                np.array([*[c(_o) for c in pid(nopid, taud=taud, ts=ts)],
+                                          *[c(_o) for c in fir(nofir=nofir, ts=tsfir, is_notch=is_notch)]])
+                                for _o in o])
         self.X = np.array([_g * _phi for _g, _phi in zip(g, self.phi)])
         self.phi.reshape((self.F, self.NOC))
         self.X.reshape((self.F, self.NOC))
+        self.x, self.y = np.real(self.X), np.imag(self.X)
         # Objective function and linear inequalties for optimization
         self.reset()
         # Initial solution
@@ -81,6 +82,22 @@ class ControllerDesign():
         self.sigma = 1 / 2 * (xg ** 2 - 1) / (xg - xp)
         self.rm = xg - self.sigma
 
+    def linecond(self, l, a, b, c=1):
+        """
+        c * y <= a*x + b for l
+        :param l:
+        :param a:
+        :param b:
+        :param c:
+        :return:
+        """
+        if not l:
+            return None
+        Gl = np.array([c * self.y - a * self.x for i in l])
+        Gl.reshape((len(l), self.NOC))
+        hl = np.ones((len(Gl), 1)) * b
+        self.lcond_append(Gl, hl)
+
     def gccond(self, nlower=10):
         """
         (1) Gain Crossover Frequency Constraints:
@@ -90,14 +107,7 @@ class ControllerDesign():
         :return:
         """
         self.l_gc = [i for i, _o in enumerate(self.o) if self.o_dgc / nlower <= _o < self.o_dgc]
-        if not self.l_gc:
-            return False
-        Gl = np.array(
-            [np.imag(self.X[i]) * np.cos(self.phi_dgc) + np.real(self.X[i]) * np.sin(self.phi_dgc)
-             for i in self.l_gc])
-        Gl.reshape((len(self.l_gc), self.NOC))
-        hl = np.ones((len(Gl), 1)) * (-1.)
-        self.lcond_append(Gl, hl)
+        self.linecond(self.l_gc, -np.tan(self.phi_dgc), -1 / np.cos(self.phi_dgc))
 
     def pmcond(self, nlower=2, nupper=2):
         """
@@ -111,12 +121,7 @@ class ControllerDesign():
         olower = self.o_dgc / nlower
         oupper = self.o_dgc / nupper
         self.l_pm = [i for i, _o in enumerate(self.o) if (self.o_dgc - olower <= _o < self.o_dgc + oupper)]
-        if not self.l_pm:
-            return False
-        Gl = np.array([np.imag(self.X[i]) - np.tan(self.theta_dpm) * np.real(self.X[i]) for i in self.l_pm])
-        Gl.reshape((len(self.l_pm), self.NOC))
-        hl = np.zeros((len(Gl), 1))
-        self.lcond_append(Gl, hl)
+        self.linecond(self.l_pm, -np.tan(self.phi_dgm), 0)
 
     def gmcond(self, nupper=1 / 5):
         """
@@ -128,15 +133,10 @@ class ControllerDesign():
         """
         oupper = self.o_dgc / nupper
         self.l_gm = [i for i, _o in enumerate(self.o) if oupper > _o >= self.o_dgc]
-        if not self.l_gm:
-            return False
         cx, cy = - np.cos(self.phi_dgm), -np.sin(self.phi_dgm)
         a = cy / (cx + 1 / self.g_dgm)
         b = a * (1 / self.g_dgm)
-        Gl = np.array([np.imag(self.X[i]) - np.real(self.X[i]) * a for i in self.l_gm])
-        Gl.reshape((len(self.l_gm), self.NOC))
-        hl = np.ones((len(Gl), 1)) * b
-        self.lcond_append(Gl, hl)
+        self.linecond(self.l_gm, -a, -b, c=-1)
 
     def pm2cond(self):
         """
@@ -145,13 +145,8 @@ class ControllerDesign():
         for o >> o_dgc
         :return:
         """
-        if not self.l_gm:
-            return False
         self.l_pm2 = [i for i, _o in enumerate(self.o) if (max(self.o[j] for j in self.l_gm) <= _o)]
-        Gl = np.array([- np.real(self.X[i]) for i in self.l_pm2])
-        Gl.reshape((len(self.l_pm2), self.NOC))
-        hl = np.ones((len(Gl), 1)) * np.cos(self.theta_dpm2)
-        self.lcond_append(Gl, hl)
+        self.linecond(self.l_pm2, 1, np.cos(self.theta_dpm2), c=0)
 
     def gainpositivecond(self, glower=0.):
         """
@@ -326,21 +321,21 @@ class ControllerDesign():
         """
         return FRF of C(s), CPID(s), or CFIR(s)
         """
-        if obj=="c":
+        if obj == "c":
             noc = self.NOC
             phi = np.array(self.phi)
             rho = np.array(self.rho)
-        elif obj==self.nopid:
+        elif obj == self.nopid:
             noc = len(self.nopid)
             phi = np.array([
-               self.phi[i][:noc] for i in range(self.F)
-            ])
+                               self.phi[i][:noc] for i in range(self.F)
+                               ])
             rho = np.array(self.rho[:noc])
         elif obj == "fir":
             noc = self.nofir
             phi = np.array([
-               self.phi[i][-self.nofir:] for i in range(self.F)
-            ])
+                               self.phi[i][-self.nofir:] for i in range(self.F)
+                               ])
             rho = np.array(self.rho[-self.nofir:])
 
         phi.reshape((self.F, noc))
