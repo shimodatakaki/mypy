@@ -87,9 +87,9 @@ def optimize(fig, o, g, nofir=50):
     while tol > 0:
         F_DGC = 2 * np.pi * f  # Desired Cross-over Frequency (rad/s)
         print("Try: ", f, " Hz")
-        fbc = ControllerDesign(o, g, nopid=NOPID, taud=TAUD, nofir=NOFIR, ts=TS, tsfir=TS, rho0=rho)
-        fbc.specification(F_DGC, THETA_DPM, GDB_DGM, theta_dpm2=THETA_DPM2)  # set constraints
         for i in range(NSTBITER):
+            fbc = ControllerDesign(o, g, nopid=NOPID, taud=TAUD, nofir=NOFIR, ts=TS, tsfir=TS, rho0=rho)
+            fbc.specification(F_DGC, THETA_DPM, GDB_DGM, theta_dpm2=THETA_DPM2)  # set constraints
             fbc.nominalcond(db=-40)  # append nominal performance condition
             fbc.stabilitycond()  # append stability condition
             fbc.gainpositivecond()  # append gain constraints
@@ -109,7 +109,6 @@ def optimize(fig, o, g, nofir=50):
                 _c.append(fbc)
                 f *= R
                 break
-        fbc.reset()  # reset constraints
 
     for e in range(11, 0, -1):
         print((11 - e) * ' ' + e * '*')
@@ -188,7 +187,7 @@ def plotall(fig, fbc, ndata=NDATA):
     myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(c)), np.angle(c, deg=True), line_style='-')
     g = fbc.g[:F]
     myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(g)), np.angle(g, deg=True), line_style='-')
-    myplot.save(fig, title='C(s)', leg=("Controller", "Plant"))
+    myplot.save(fig, title='C(s)', leg=("Controller", "Plant"), save_name="Controller")
 
     ##########Plot4##########
     fig += 1
@@ -206,10 +205,16 @@ def plotall(fig, fbc, ndata=NDATA):
 
     ##########Plot5##########
     fig += 1
-    c = fbc.freqresp(obj="pid")[:F]
-    myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(c)), np.angle(c, deg=True), line_style='-')
-    c = fbc.freqresp(obj="fir")[:F]
-    myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(c)), np.angle(c, deg=True), line_style='-')
+    try:
+        c = fbc.freqresp(obj="pid")[:F]
+        myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(c)), np.angle(c, deg=True), line_style='-')
+    except:
+        pass
+    try:
+        c = fbc.freqresp(obj="fir")[:F]
+        myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(c)), np.angle(c, deg=True), line_style='-')
+    except:
+        pass
     myplot.save(fig, title='Controllers', leg=("PID", "FIR"))
 
     return fig
