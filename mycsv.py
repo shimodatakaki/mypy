@@ -30,4 +30,4 @@ def read_float(path, is_header=True):
         reader = csv.reader(f)
         if is_header:
             header = next(reader)
-        return [np.array([float(x) for x in row]) for row in zip(*reader)]
+        return [np.array([float(x) for x in row if x]) for row in zip(*reader)]
