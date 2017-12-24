@@ -22,7 +22,8 @@ class ControllerDesign():
     Default Controller: PIDs + 50 FIRs (53 variables)
     """
 
-    def __init__(self, o, g, nopid="pid", taud=0.01, nofir=10, ts=0.001, tsfir=0.001, rho0=None, is_notch=False):
+    def __init__(self, o, g, nopid="pid", taud=0.01, nofir=10, is_notch=False, notch_offset=0, ts=0.001, tsfir=0.001,
+                 rho0=None):
         """
         L = P*C = X*rho, where X = g*phi.T. phi:Basis FRF of controller, rho:Controller parameters.
         x, y = real(L), imag(L)
@@ -42,7 +43,8 @@ class ControllerDesign():
         self.NOC = len(nopid) + nofir
         self.phi = np.array([
                                 np.array([*[c(_o) for c in pid(nopid, taud=taud, ts=ts)],
-                                          *[c(_o) for c in fir(nofir=nofir, ts=tsfir, is_notch=is_notch)]])
+                                          *[c(_o) for c in
+                                            fir(nofir=nofir, ts=tsfir, is_notch=is_notch, noffset=notch_offset)]])
                                 for _o in o])
         self.X = np.array([_g * _phi for _g, _phi in zip(g, self.phi)])
         self.phi.reshape((self.F, self.NOC))
@@ -52,8 +54,10 @@ class ControllerDesign():
         self.reset()
         # Initial solution
         if rho0 is None:
-            rho0 = np.array([10 ** (-6) if i < len(nopid) else 0 for i in range(self.NOC)])
-            # rho0 = np.zeros(self.NOC)
+            if not is_notch:
+                rho0 = np.array([10 ** (-6) if i < len(nopid) else 0 for i in range(self.NOC)])
+            else:
+                rho0 = np.array([1 if i == 0 else 0 for i in range(self.NOC)])
         self.rho = rho0
 
     def specification(self, o_dgc, theta_dpm, gdb_dgm, phi_dgc=np.pi / 6, theta_dpm2=np.pi / 4, phi_dgm=np.pi / 6):
@@ -148,19 +152,23 @@ class ControllerDesign():
         self.l_pm2 = [i for i, _o in enumerate(self.o) if (max(self.o[j] for j in self.l_gm) <= _o)]
         self.linecond(self.l_pm2, 1, np.cos(self.theta_dpm2), c=0)
 
-    def gainpositivecond(self, glower=0.):
+    def gainpositivecond(self, glower=0., is_fir=False):
         """
-        (5) any(rho[:len(nopid)] > 0) == True, and sum(rho[nofir:]) > 0 == True
+        (5) any(rho[:len(nopid)] > 0) == True, or any(rho[-nofir:]) > 0 == True if is_notch
         :param glower:
         :param nocon:
         :return:
         """
-        nocon = len(self.nopid)
-        Gl = np.zeros((nocon, self.NOC))
+        if not is_fir:
+            noconl = 0
+            noconu = len(self.nopid)
+        else:
+            noconl = len(self.nopid)
+            noconu = self.NOC
+        Gl = np.zeros((noconu - noconl, self.NOC))
         for i in range(len(Gl)):
-            if i < nocon:
-                Gl[i][i] = -1.
-        hl = - glower * np.ones((nocon, 1))
+            Gl[i][i + noconl] = -1.
+        hl = - glower * np.ones((len(Gl), 1))
         self.lcond_append(Gl, hl)
 
     def picond(self, ti=50 * 10 ** (-3)):
@@ -225,6 +233,7 @@ class ControllerDesign():
         :param db:
         :return:
         """
+        self.nominal_sensitivity = db
         m = db / (-20)
         r = [(self.o_dgc / self.o[i]) ** m for i in self.l]
         self.outofdiskcond(r, -1)
@@ -305,6 +314,22 @@ class ControllerDesign():
                     A[0][i] = 1
             b = term * np.ones(1)
             self.econd_append(A, b)
+
+    def firnotchcond(self, term=1):
+        """
+        (5) FIR Notch constraint:
+        CFIR(1)=1
+        as notch filter wokrs
+        :param term:
+        :return:
+        """
+        A = np.zeros((1, self.NOC))
+        for i in range(self.NOC):
+            k = i - len(self.nopid)
+            if k >= 0:
+                A[0][i] = 1
+        b = term * np.ones(1)
+        self.econd_append(A, b)
 
     def optimize(self, solver="socp"):
         """
@@ -424,10 +449,10 @@ def pid(nopid, taud, ts=0.0):
     return [pid_controller[t] for t in nopid.lower()]
 
 
-def fir(nofir, ts, is_notch=False):
+def fir(nofir, ts, is_notch=False, noffset=0):
     """
     return [z^-1 (o), z^-2 (o), ..., z^-nofir (o)] if not is_notch (PARALLEL TYPE)
-    else return [CFIR0(z), ..., CFIRnofr(z) ], where CFIRi(z) = (1+z**(-i))/2
+    else return [CFIR0(z), ..., CFIRnofir-1(z) ], where CFIRi(z) = (1+z**(-i))/2
     where z = exp(ts*s)
     :param nofir: number of FIR filters
     :param ts:
@@ -439,21 +464,21 @@ def fir(nofir, ts, is_notch=False):
             def zinv(o):
                 s = 1.j * o
                 zi = np.exp(- ts * s)
-                return zi ** (n)
+                return zi ** n
 
             return zinv
 
-        return [nfir(i) for i in range(1, 1 + nofir)]
+        return [nfir(i) for i in range(1 + noffset, 1 + noffset + nofir)]
     else:
         def nfirnotch(n):
             def firnotch(o):
                 s = 1.j * o
                 zi = np.exp(- ts * s)
-                return (zi ** (n) + 1) / 2
+                return (zi ** n + 1) / 2
 
             return firnotch
 
-        return [nfirnotch(i) for i in range(nofir)]
+        return [nfirnotch(i) for i in (0, *range(noffset, noffset + nofir - 1))]
 
 
 def check_disk(l, r, sigma):
