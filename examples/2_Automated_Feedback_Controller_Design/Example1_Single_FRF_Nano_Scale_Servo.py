@@ -9,19 +9,22 @@ import mysignal
 import mycsv
 from scipy import signal
 import matplotlib.pyplot as plt
+from sympy import *
 
-DATA = "data"
+DATA = "data/example1_result"
 F = 1000  # number of FRF lines
 TS = 50 * 10 ** (-6)  # sampring of FIRs
 TD = 3 / 10 * TS  # Delay
-NDATA = 1
+NDATA = 1  # number of data
 
 
-def plant(fig):
+def plant(fig, datapath=DATA):
     """
     return FRF
     :return:
     """
+    s = symbols('s')
+
     on = 2 * np.pi * np.array([0, 3950, 5400, 6100, 7100])
     kappa = [1, -1, 0.4, -1.2, 0.9]
     zeta = [0, 0.035, 0.015, 0.015, 0.06]
@@ -38,13 +41,11 @@ def plant(fig):
     p = mysignal.symbolic_to_tf(P, s, ts=0)
     o = 2 * np.pi * np.linspace(10 ** 0, 10 ** 4, num=F)
     o, mag, phase = signal.bode(p, w=o)
-    theta = phase / 180 * np.pi
-    a = 10 ** (mag / 20)
-    h = a * np.exp(1.j * theta)
+    h = mysignal.magphase2resp(mag, phase)
     # calc discrete with 3/10 delay
     h = h * mysignal.zoh_w_delay(o, TS, TD)
-    myplot.bodeplot(fig, o / 2 / np.pi, 20 * np.log10(abs(h)), np.angle(h, deg=True), line_style="-",
-                    xl=[10 ** 1, 10 ** 4])
+    mag, angle = mysignal.resp2magphase(h, deg=True)
+    myplot.bodeplot(fig, o / 2 / np.pi, mag, angle, line_style="-", xl=[10 ** 1, 10 ** 4])
 
     ol = np.append(ol, o)
     hl = np.append(hl, h)
@@ -58,7 +59,7 @@ def plant(fig):
     return fig, np.array(ol), np.array(hl)
 
 
-def optimize(fig, o, g, nofir=50):
+def optimize(fig, o, g, nofir=50, datapath=DATA):
     """
     calc pids and firs
     :param o:
@@ -73,7 +74,7 @@ def optimize(fig, o, g, nofir=50):
 
     NSTBITER = 3
 
-    TAUD = 5 * TS  # Pseudo Differential Cut-off for D Control
+    TAUD = 2 * TS  # Pseudo Differential Cut-off for D Control
     NOFIR = nofir  # Number of FIRs
     NOPID = "pid"
 
@@ -93,7 +94,7 @@ def optimize(fig, o, g, nofir=50):
             fbc.nominalcond(db=-40)  # append nominal performance condition
             fbc.stabilitycond()  # append stability condition
             fbc.gainpositivecond()  # append gain constraints
-            fbc.picond(ti=50 / 1000)  # append gain constraints
+            fbc.picond(ti=50 / 1000)
             if i > 0 and nofir > 0:
                 fbc.fircond()  # append gain constraints
             try:
@@ -122,14 +123,14 @@ def optimize(fig, o, g, nofir=50):
     fbc = _c[i_max]
     print("PIDs:", fbc.rho[:3])
     print("FIRs:", fbc.rho[3:])
-    mycsv.save(fbc.rho, save_name=DATA + "/rho" + str(fig) + ".csv",
+    mycsv.save(fbc.rho, save_name=datapath + "/rho" + str(fig) + ".csv",
                header=("P,I,D, FIR(1+n) for n in range(" + str(nofir) + ")", "taud (s):" + str(TAUD),
                        "FIR sampling (s):" + str(TS)))
 
     return fig, fbc
 
 
-def plotall(fig, fbc, ndata=NDATA):
+def plotall(fig, fbc, ndata=NDATA, datapath=DATA):
     """
 
     :param fig:
@@ -164,12 +165,12 @@ def plotall(fig, fbc, ndata=NDATA):
                 line_style="yo")
     myplot.save(fig, xl=[-1, 1], yl=[-1, 1],
                 leg=(*["Nyquist" + str(k) for k in range(ndata)], "r=1", "Origin", "(-1,j0)", "Stb. Cond.", "Margins"),
-                label=("Re", "Im"), save_name=DATA + "/" + str(fig) + "_nyquist_enlarged",
+                label=("Re", "Im"), save_name=datapath + "/" + str(fig) + "_nyquist_enlarged",
                 title="Optimized Gain-Crossover Frequency (Hz): " + str(f_gc))
 
     myplot.save(fig, xl=[-3, 3], yl=[-3, 3],
                 leg=(*["Nyquist" + str(k) for k in range(ndata)], "r=1", "Origin", "(-1,j0)", "Stb. Cond.", "Margins"),
-                label=("Re", "Im"), save_name=DATA + "/" + str(fig) + "_nyquist",
+                label=("Re", "Im"), save_name=datapath + "/" + str(fig) + "_nyquist",
                 title="Optimized Gain-Crossover Frequency (Hz): " + str(f_gc))
 
     ##########Plot2##########
@@ -178,7 +179,7 @@ def plotall(fig, fbc, ndata=NDATA):
     for L in Llist:
         myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(L)), np.angle(L, deg=True),
                         line_style='-')
-    myplot.save(fig, save_name=DATA + "/" + str(fig) + "_bode", title="Openloop L(s)",
+    myplot.save(fig, save_name=datapath + "/" + str(fig) + "_bode", title="Openloop L(s)",
                 leg=["L" + str(k) for k in range(ndata)])
 
     ##########Plot3##########
@@ -187,21 +188,20 @@ def plotall(fig, fbc, ndata=NDATA):
     myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(c)), np.angle(c, deg=True), line_style='-')
     g = fbc.g[:F]
     myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(g)), np.angle(g, deg=True), line_style='-')
-    myplot.save(fig, title='C(s)', leg=("Controller", "Plant"), save_name="Controller")
+    myplot.save(fig, title='C(s)', leg=("Controller", "Plant"), save_name=datapath + "/Controller")
 
     ##########Plot4##########
     fig += 1
-    x = (fbc.o_dgc / fbc.o[:F]) ** 2
+    m = fbc.nominal_sensitivity / (-20)
+    x = (fbc.o_dgc / fbc.o[:F]) ** m
     myplot.plot(fig, o[:F] / 2 / np.pi, - 20 * np.log10(abs(x)), line_style='k--', plotfunc=plt.semilogx)
-    ylower = []
     for L in Llist:
         T = 1 / (1 + L)
         S = 1 - T
         myplot.plot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(T)), line_style='b-', plotfunc=plt.semilogx)
         myplot.plot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(S)), line_style='r-', plotfunc=plt.semilogx)
-        ylower.append(min(20 * np.log10(abs(S))))
-    myplot.save(fig, save_name=DATA + "/" + str(fig) + "_ST", title="S(s) (Blue) and T(s) (Red).", leg=("Nominal",),
-                yl=(min(ylower), 10))
+    myplot.save(fig, save_name=datapath + "/" + str(fig) + "_ST", title="S(s) (Blue) and T(s) (Red).",
+                leg=("Nominal:" + str(fbc.nominal_sensitivity) + " dB/dec",), yl=(-80, 10))
 
     ##########Plot5##########
     fig += 1
@@ -221,15 +221,12 @@ def plotall(fig, fbc, ndata=NDATA):
 
 
 if __name__ == "__main__":
-    from sympy import *
     import os
 
     try:
         os.mkdir(DATA)
     except:
         pass
-
-    s = symbols('s')
 
     fig = -1
 
