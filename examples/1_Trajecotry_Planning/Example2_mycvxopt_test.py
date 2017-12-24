@@ -4,6 +4,7 @@ Example2: mycvxopt test
 import mycvxopt
 import numpy as np
 
+
 def test():
     """
 
@@ -68,9 +69,28 @@ def test():
     Gl = np.eye(2) * -1
     hl = - 0. * np.ones(2)
 
-    sol = mycvxopt.solve("sdp", [c], G=Gl, h=hl, Gsl=Gs, hsl=hs)
+    sol = mycvxopt.solve("sdp", [c], G=Gl, h=hl, Gsl=Gs, hsl=hs, MAX_ITER_SOL=1)
     print(sol)
+
+    """
+    Semi-Definite Progamming
+    """
+    c = np.array([0., 0.])
+
+    hs0 = [[-1., 0.], [0., -1.]]
+    Gs0 = [[0., 1, 1, 0], [0., 0, 0, 0]]
+
+    Gs = [Gs0]
+    hs = [hs0]
+
+    Gl = np.eye(2) * -1
+    hl = - 0. * np.ones(2)
+
+    try:
+        sol = mycvxopt.solve("sdp", [c], G=Gl, h=hl, Gsl=Gs, hsl=hs)
+    except:
+        print("THIS PROBELM IS INFEASIBLE BECAUSE IT IS CONCAVE!!!")
+
 
 if __name__ == "__main__":
     test()
-

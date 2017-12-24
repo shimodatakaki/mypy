@@ -28,6 +28,7 @@ def solve_qp(P, q, G=None, h=None, A=None, b=None):
         args.extend([matrix(A), matrix(b)])
     sol = solvers.qp(*args)
     if 'optimal' not in sol['status']:
+        print("CVXOPT FAIL:", sol['status'])
         return None
     return np.array(sol['x']).reshape((P.shape[1],))
 
@@ -47,6 +48,7 @@ def solve_lp(c, G, h, A=None, b=None):
         args.extend([matrix(A), matrix(b)])
     sol = solvers.lp(*args)
     if 'optimal' not in sol['status']:
+        print("CVXOPT FAIL:", sol['status'])
         return None
     return np.array(sol['x']).reshape((len(c),))
 
@@ -74,6 +76,7 @@ def solve_socp(c, Gl=None, hl=None, Gql=[], hql=[], A=None, b=None):
         args.extend([matrix(A), matrix(b)])
     sol = solvers.socp(*args)
     if 'optimal' not in sol['status']:
+        print("CVXOPT FAIL:", sol['status'])
         return None
     return np.array(sol['x']).reshape((len(c),))
 
@@ -101,6 +104,7 @@ def solve_sdp(c, Gl=None, hl=None, Gsl=[], hsl=[], A=None, b=None):
         args.extend([matrix(A), matrix(b)])
     sol = solvers.sdp(*args)
     if 'optimal' not in sol['status']:
+        print("CVXOPT FAIL:", sol['status'])
         return None
     return np.array(sol['x']).reshape((len(c),))
 
