@@ -29,7 +29,7 @@ def zoh_w_delay(o, ts, td=0):
          for _o in o])
 
 
-def symbolic_to_tf(expr, symbol, ts=0.0):
+def symbolic_to_tf(expr, symbol=symbols('s'), ts=0.0):
     """
 
     :param expr:P('s')
@@ -51,6 +51,14 @@ def symbolic_to_tf(expr, symbol, ts=0.0):
         p = signal.TransferFunction([x for x in n[0] if not x == 0], [x for x in d if not x == 0], dt=ts)
         return p
 
+def magphase2resp(mag, phase):
+    theta = phase / 180 * np.pi
+    a = 10 ** (mag / 20)
+    h = a * np.exp(1.j * theta)
+    return h
+
+def resp2magphase(h, deg=False):
+    return 20*np.log10(h), np.angle(h, deg=deg)
 
 def array_to_eq(a, x):
     """
