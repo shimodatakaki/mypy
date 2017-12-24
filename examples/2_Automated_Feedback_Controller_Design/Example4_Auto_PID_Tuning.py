@@ -23,16 +23,17 @@ def optimize(fig, o, g, datapath=DATA):
     THETA_DPM2 = 30 / 180 * np.pi  # Second Phase Margin
     GDB_DGM = 5  # Gain Margin in (dB)
 
-    NSTBITER = 3
+    NSTBITER = 4
 
     TAUD = 2 * TS  # Pseudo Differential Cut-off for D Control
     NOFIR = 0  # Only PID
     NOPID = "pid"
 
     f = 10
-    _f = []
-    _c = []
+    _f = [0]
+    _c = [None]
     rho = None
+    rho_best = rho
     R = 2
     LAMBDA = (1 + R) / R / 2
     tol = 15
@@ -50,10 +51,14 @@ def optimize(fig, o, g, datapath=DATA):
             except:
                 tol -= 1
                 f = f * LAMBDA
+                rho = rho_best
                 break
             if i >= NSTBITER // 2 and check_disk(np.dot(fbc.X, fbc.rho), fbc.rm, fbc.sigma):
                 print("Solver found a local minima @ iteration", i)
-                print()
+                if f > max(_f):
+                    rho_best = rho
+                    print("best @", f)
+                    print()
                 _f.append(f)
                 _c.append(fbc)
                 f *= R
