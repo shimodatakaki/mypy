@@ -116,7 +116,7 @@ def scale_fft(xf, fs, N=None, yaxis="dB"):
     return freq, gain, phi
 
 
-def bodeplot(fig, freq, gain, phi, line_style='b-', nos=2, yaxis="dB", xl=None):
+def bodeplot(fig, freq, gain, phi, line_style='-', nos=2, yaxis="dB", xl=None):
     """
     plot bode plot, given frequency, gain, and phase
     :param freq:
@@ -149,7 +149,7 @@ def bodeplot(fig, freq, gain, phi, line_style='b-', nos=2, yaxis="dB", xl=None):
             plt.xlim(xl)
 
 
-def FFT(fig_num, x, fs, line_style="r+"):
+def FFT(fig_num, x, fs, line_style="-"):
     """
     plot FFT results of signal
     :param x:
