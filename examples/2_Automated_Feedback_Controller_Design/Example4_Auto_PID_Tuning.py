@@ -99,7 +99,7 @@ if __name__ == "__main__":
 
     import Example1_Single_FRF_Nano_Scale_Servo as ex1
 
-    fig, o, h = ex1.plant(fig)
+    fig, o, h = ex1.plant(fig, datapath=DATA)
     fig, fbc = optimize(fig, o, h)
     ex1.plotall(fig, fbc, ndata=NDATA, datapath=DATA)
 

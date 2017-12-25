@@ -8,10 +8,9 @@ import myplot
 import mysignal
 import mycsv
 from scipy import signal
+import Example1_Single_FRF_Nano_Scale_Servo as ex1
 
-from Example1_Single_FRF_Nano_Scale_Servo import *
-
-DATA = "data"
+DATA = "data/example3_result"
 F = 1000  # number of FRF lines
 TS = 50 * 10 ** (-6)  # sampring of FIRs
 TD = 3 / 10 * TS  # Delay
@@ -80,7 +79,7 @@ if __name__ == "__main__":
 
     fig = -1
     fig, o, g = plant_data(fig)
-    fig, fbc = optimize(fig, o, g, nofir=30)
-    fig = plotall(fig, fbc, ndata=NDATA)
+    fig, fbc = ex1.optimize(fig, o, g, nofir=30)
+    fig = ex1.plotall(fig, fbc, ndata=NDATA, datapath=DATA)
 
     myplot.show()

@@ -50,9 +50,9 @@ def plant(fig, datapath=DATA):
     ol = np.append(ol, o)
     hl = np.append(hl, h)
 
-    myplot.save(fig, save_name=DATA + "/" + str(fig) + "_plant", title="plant",
+    myplot.save(fig, save_name=datapath + "/" + str(fig) + "_plant", title="plant",
                 leg=["plant" + str(i) for i in range(NDATA)])
-    mycsv.save(ol, np.real(hl), np.imag(hl), save_name=DATA + "/example1_plant_frf.csv",
+    mycsv.save(ol, np.real(hl), np.imag(hl), save_name=datapath + "/example1_plant_frf.csv",
                header=("o (rad/s)", "real(FRF)", "imag(FRF)"))
 
     assert len(ol) == len(hl)
@@ -79,12 +79,13 @@ def optimize(fig, o, g, nofir=50, datapath=DATA):
     NOPID = "pid"
 
     f = 10
-    _f = []
-    _c = []
+    _f = [0]
+    _c = [None]
     rho = None
     R = 2
     LAMBDA = (1 + R) / R / 2
     tol = 10
+    rho_best=rho
     while tol > 0:
         F_DGC = 2 * np.pi * f  # Desired Cross-over Frequency (rad/s)
         print("Try: ", f, " Hz")
@@ -102,9 +103,13 @@ def optimize(fig, o, g, nofir=50, datapath=DATA):
             except:
                 tol -= 1
                 f = f * LAMBDA
+                rho = rho_best
                 break
             if i >= NSTBITER // 2 and check_disk(np.dot(fbc.X, fbc.rho), fbc.rm, fbc.sigma):
                 print("Solver found a local minima @ iteration", i)
+                if f > max(_f):
+                    print("Best @", f)
+                    rho_best = rho
                 print()
                 _f.append(f)
                 _c.append(fbc)
