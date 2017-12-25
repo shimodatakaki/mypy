@@ -2,6 +2,7 @@
 data/
 history/
 test/
+*.pptx
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
