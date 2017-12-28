@@ -202,7 +202,7 @@ def constraints(G, ub, lb):
 
 def qc2socp(A, b, c, d):
     """
-    Transfrom ||A*x + b*x|| <= c*x + d into
+    Transfrom ||A*x + b*x|| <= c.T*x + d into
     G*x + [s0; s1] = h, s.t. s0 >= ||s1||2, G = [[-c.T], [-A]], and h = [d; b]
     for second-oder cone programming
     For more information, see
@@ -213,7 +213,10 @@ def qc2socp(A, b, c, d):
     :param d:
     :return:
     """
+    assert len(c.shape) == 1 or c.shape[0] >= c.shape[1]
     Gq = np.block([[-c.T], [-A]])
     hq = np.append(d, b)
     Gq.reshape((Gq.shape[0] * Gq.shape[1] // len(c), len(c)))
+    hq.reshape(len(Gq))
+
     return Gq, hq
