@@ -189,7 +189,10 @@ def plotall(fig, fbc, ndata=NDATA, datapath=DATA):
 
     ##########Plot3##########
     fig += 1
-    c = fbc.freqresp()[:F]
+    try:
+        c = fbc.freqresp()[:F]
+    except:
+        c = fbc.C[:F]
     myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(c)), np.angle(c, deg=True), line_style='-')
     g = fbc.g[:F]
     myplot.bodeplot(fig, o[:F] / 2 / np.pi, 20 * np.log10(abs(g)), np.angle(g, deg=True), line_style='-')

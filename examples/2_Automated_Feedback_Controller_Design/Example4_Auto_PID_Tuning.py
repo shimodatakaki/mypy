@@ -6,7 +6,7 @@ from myfbcd import *
 import myplot
 import mycsv
 
-DATA = "data/example5_result"
+DATA = "data/example4_result"
 TS = 50 * 10 ** (-6)  # sampring of FIRs
 TD = 3 / 10 * TS  # Delay
 NDATA = 1  # number of data
@@ -25,7 +25,7 @@ def optimize(fig, o, g, datapath=DATA):
 
     NSTBITER = 4
 
-    TAUD = 2 * TS  # Pseudo Differential Cut-off for D Control
+    TAUD = 5 * TS  # Pseudo Differential Cut-off for D Control
     NOFIR = 0  # Only PID
     NOPID = "pid"
 
@@ -34,7 +34,7 @@ def optimize(fig, o, g, datapath=DATA):
     _c = [None]
     rho = None
     rho_best = rho
-    R = 2
+    R = 1.5
     LAMBDA = (1 + R) / R / 2
     tol = 15
     while tol > 0:
