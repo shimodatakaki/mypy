@@ -406,6 +406,277 @@ class ControllerDesign():
         return np.array(gain_crossover_o) / 2 / np.pi
 
 
+class IIRControllerDesign():
+
+    def __init__(self, o, g, ts=50 * 10 ** (-6), rhon=[], rhod=[], blist=[], dlist=[]):
+        """
+        k = 0, 1, ..., F-1
+        Controller: Ck = ( a0k.T * rhon + b0k ) / ( c0k.T * rhod + d0k )
+        Open Loop: Lk = gk * Ck
+        Parameter vector rho = [rhom; rhod]
+        :param o: Frequency ok
+        :param g: Plant FRF gk
+        :param ts: Sampling period
+        :param rhon: numerator parameter
+        :param rhod: denominator parameter
+        """
+        self.o = o
+        self.g = g
+        self.ts = ts
+        self.F = len(o)
+        self.l = [i for i in range(self.F)]
+
+        if rhod == []:
+            rhod = np.array([5 * ts for i in range(1)])
+        if rhon == []:
+            # rhon = np.array(pidtaud2b(10 ** (-4), 10 ** (-3), 10 ** (-5), rhod[0]))
+            rhon = np.array(pidtaud2b(0.2, 200, 10 ** (-4), rhod[0]))
+        self.nonum = len(rhon)
+        self.noden = len(rhod)
+        self.NOC = self.nonum + self.noden
+        self.rhon = rhon
+        self.rhod = rhod
+        self.rho = np.block([self.rhon, self.rhod])
+
+        self.reset() #set objectives and constraints
+
+        self.a0T, self.b0, self.c0T, self.d0 = self.basis(self.o, self.ts, blist, dlist) #set basis
+
+    def basis(self, o, ts, blist=[], dlist=[]):
+        """
+        return basis a0.T, b0, c0T, d0 of controller
+        :param o:
+        :param ts:
+        :param blist:
+        :param dlist:
+        :return:
+        """
+        a0T, b0, c0T, d0 = np.array([]), np.array([]), np.array([]), np.array([])
+        for k, ok in enumerate(o):
+            s = 1.j * ok
+            zi = np.exp(- ts * s)
+            # Inverse bilinear transform is used to avoid ill condition @ z=-1
+            sinv = (ts * (1 + zi)) / (2 * (1 - zi))
+            aT = np.array([sinv ** i for i in range(self.nonum)])
+            if not blist:
+                b = 0
+            else:
+                b = blist[k]
+            cT = np.array([sinv ** i for i in range(self.noden)])
+            if not dlist:
+                d = sinv
+            else:
+                d = dlist[k]
+            a0T = np.append(a0T, aT)
+            b0 = np.append(b0, b)
+            c0T = np.append(c0T, cT)
+            d0 = np.append(d0, d)
+        return a0T.reshape((len(o), self.nonum)), b0, c0T.reshape((len(o), self.noden)), d0
+
+    def specification(self, o_dgc, theta_dpm, gdb_dgm, phi_dgc=np.pi / 6, theta_dpm2=np.pi / 4, phi_dgm=np.pi / 6):
+        """
+
+        :param o_dgc: Desired Gain-Crossover Frequency (rad/s)
+        :param theta_dpm: Desired Phase Margin (rad)
+        :param gdb_dgm: Desired Gain Margin (dB)
+        :param phi_dgc: Constraints parameter for dgc
+        :param theta_dpm2: Desired Second Phase Margin (rad)
+        :param phi_dgm: Constraints parameter for dgm
+        :return:
+        """
+        g_dgm = 10 ** (gdb_dgm / 20)
+        self.o_dgc = o_dgc
+        self.phi_dgc = phi_dgc
+        self.theta_dpm = theta_dpm
+        self.g_dgm = g_dgm
+        self.phi_dgm = phi_dgm
+        self.theta_dpm2 = theta_dpm2
+        # A circle that satisfies Gain Margin, Phase Margin, and Second Phase Margin.
+        tm = max(theta_dpm, theta_dpm2)
+        xg = -1 / g_dgm
+        xp, yp = -np.cos(tm), -np.sin(tm)
+        self.sigma = 1 / 2 * (xg ** 2 - 1) / (xg - xp)
+        self.rm = xg - self.sigma
+
+    def outofdiskcond(self, rm, sigma):
+        """
+        Add SOCP constarints:
+        rk - |Lk - simgak| <=0 <--->
+        ||Ak rho - Bk||2 <= Ck.T rho + Dk for k in self.l
+        :param rm:
+        :param sigma:
+        :return:
+        """
+        for i in self.l:
+            E = np.block([self.g[i] * self.a0T[i], -sigma[i] * self.c0T[i]])
+            F = self.g[i] * self.b0[i] - sigma[i] * self.d0[i]
+            G = np.block([np.zeros(self.nonum), self.c0T[i]])
+            H = self.d0[i]
+            E.reshape((1, self.NOC))
+            G.reshape((1, self.NOC))
+            n0 = np.dot(E, self.rho) + F
+            I = np.real(np.conj(n0) * E) / abs(n0)
+            J = np.real(np.conj(n0) * F) / abs(n0)
+            A = np.block([[np.real(G)], [np.imag(G)]])
+            B = np.block([[np.real(H)], [np.imag(H)]])
+            C = I / rm[i]
+            D = J / rm[i]
+            gq0, hq0 = mycvxopt.qc2socp(A, B, C, D)
+            self.Gql.append(gq0)
+            self.hql.append(hq0)
+
+
+    def nominalcond(self, db=-40):
+        """
+        (8) Nominal Performance Constraints:
+        (x-1)**2 + y**2 >= |W1(s)|**2, where W1(s) = (self.o_dgc/s) ** m
+        for all o
+        :param db:
+        :return:
+        """
+        self.nominal_sensitivity = db
+        m = db / (-20)
+        r = [(self.o_dgc / self.o[i]) ** m for i in self.l]
+        self.outofdiskcond(r, -1 * np.ones(self.F))
+
+    def stabilitycond(self, rm=None, sigma=None):
+        """
+        (6) Stability Constaints:
+        (x-sigma)**2 + y**2 >= rm**2
+        for all o
+        :param rm: radius of stability disk
+        :param sigma: center of stability disk
+        :return:
+        """
+        if rm is None:
+            rm = self.rm
+        if sigma is None:
+            sigma = self.sigma * np.ones(self.F)
+        r = rm * np.ones(self.F)
+        self.outofdiskcond(r, sigma)
+
+    def gainpositivecond(self, glower=0.):
+        """
+        (5) any(rho[:len(nopid)] > 0) == True, or any(rho[-nofir:]) > 0 == True if is_notch
+        :param glower:
+        :param nocon:
+        :return:
+        """
+        Gl = -1 * np.eye(self.NOC)
+        hl = - glower * np.ones((len(Gl), 1))
+        self.lcond_append(Gl, hl)
+
+    def optimize(self, solver="socp"):
+        """
+        Available Solvers: Linear Programming (of course including min infinity-norm/1-norm), Quadratic Prgramming,
+        Second-Order Cone Prgramming, Semi-Definite Progamming (or LMI)
+        :param solver:
+        :return:
+        """
+        self.rho = mycvxopt.solve(solver, [self.c], G=self.Gl, h=self.hl, Gql=self.Gql, hql=self.hql, Gsl=self.Gsl,
+                                  hsl=self.hsl, A=self.A, b=self.b, MAX_ITER_SOL=1)
+        self.rhon = self.rho[:self.nonum]
+        self.rhod = self.rho[self.nonum:]
+        return self.rho
+
+    def lcond_append(self, Gl, hl):
+        """
+        Append condtion to Gl and hl
+        :param Gl:
+        :param hl:
+        :return:
+        """
+        if self.Gl is None:
+            self.Gl = Gl
+            self.hl = hl
+        else:
+            self.Gl = np.block([[self.Gl], [Gl]])
+            self.hl = np.block([[self.hl], [hl]])
+
+    def reset(self):
+        """
+        Reset linear Inequalities Condtions
+        :return:
+        """
+        self.c = np.zeros((self.NOC, 1))  # default FIND
+
+        self.c.reshape((self.NOC, 1))
+        self.Gl, self.hl = None, None
+        self.Gql, self.hql = [], []
+        self.Gsl, self.hsl = [], []
+        self.A, self.b = None, None
+
+    def split(self, n):
+        """
+        split data to n parts (into each FRF)
+        :param n:
+        :return:
+        """
+        self.olist = mynum.nsplit(self.o, n)
+        self.controller()
+        self.Clist = mynum.nsplit(self.C, n)
+        self.openloop()
+        self.Llist = mynum.nsplit(self.L, n)
+
+    def controller(self):
+        """
+        calculate controller response
+        :return:
+        """
+        self.C = np.array([
+            (np.dot(self.a0T[i], self.rhon) + self.b0[i]) / (np.dot(self.c0T[i], self.rhod) + self.d0[i])
+            for i in self.l])
+
+    def openloop(self):
+        """
+        calculate open loop response
+        :return:
+        """
+        self.L = self.g * self.C
+
+    def calc_gcf(self):
+        """
+        calculate acutual gain crossover frequency
+        :return:
+        """
+        gain_crossover_o = []
+        for o, l in zip(self.olist, self.Llist):
+            for _o, _l in zip(o, l):
+                if not check_disk((_l,), 1, 0):
+                    gain_crossover_o.append(temp)
+                    break
+                temp = _o
+        return np.array(gain_crossover_o) / 2 / np.pi
+
+
+def pidtaud2b(kp, ki, kd, taud):
+    """
+    PIDtauD to b vector
+    :param kp:
+    :param ki:
+    :param kd:
+    :param taud:
+    :return:
+    """
+    b0 = ki
+    b1 = kp + ki * taud
+    b2 = kd + kp * taud
+    return [b2, b1, b0]
+
+
+def btaud2pid(b, taud):
+    """
+    b vector to PIDtauD
+    :param b:
+    :param taud:
+    :return:
+    """
+    ki = b[2]
+    kp = b[1] - ki * taud
+    kd = b[0] - kp * taud
+    return kp, ki, kd
+
+
 class Simulation():
     def __init__(self, s, plant, controller):
         l = plant * controller
