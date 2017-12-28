@@ -24,7 +24,7 @@ Just append *mypy* to your *PYTHONPATH*, or
 Documentation
 =============
 
-Documentation is not available for now.
+Read pdfs in doc/
 
 Examples
 =============
