@@ -42,10 +42,10 @@ class ControllerDesign():
         self.nofir = nofir
         self.NOC = len(nopid) + nofir
         self.phi = np.array([
-                                np.array([*[c(_o) for c in pid(nopid, taud=taud, ts=ts)],
-                                          *[c(_o) for c in
-                                            fir(nofir=nofir, ts=tsfir, is_notch=is_notch, noffset=notch_offset)]])
-                                for _o in o])
+            np.array([*[c(_o) for c in pid(nopid, taud=taud, ts=ts)],
+                      *[c(_o) for c in
+                        fir(nofir=nofir, ts=tsfir, is_notch=is_notch, noffset=notch_offset)]])
+            for _o in o])
         self.X = np.array([_g * _phi for _g, _phi in zip(g, self.phi)])
         self.phi.reshape((self.F, self.NOC))
         self.X.reshape((self.F, self.NOC))
@@ -353,14 +353,14 @@ class ControllerDesign():
         elif obj == self.nopid:
             noc = len(self.nopid)
             phi = np.array([
-                               self.phi[i][:noc] for i in range(self.F)
-                               ])
+                self.phi[i][:noc] for i in range(self.F)
+            ])
             rho = np.array(self.rho[:noc])
         elif obj == "fir":
             noc = self.nofir
             phi = np.array([
-                               self.phi[i][-self.nofir:] for i in range(self.F)
-                               ])
+                self.phi[i][-self.nofir:] for i in range(self.F)
+            ])
             rho = np.array(self.rho[-self.nofir:])
 
         phi.reshape((self.F, noc))
@@ -427,9 +427,8 @@ class IIRControllerDesign():
         self.l = [i for i in range(self.F)]
 
         if rhod == []:
-            rhod = np.array([5 * ts for i in range(1)])
+            rhod = np.array([5 * ts, 1])
         if rhon == []:
-            # rhon = np.array(pidtaud2b(10 ** (-4), 10 ** (-3), 10 ** (-5), rhod[0]))
             rhon = np.array(pidtaud2b(0.2, 200, 10 ** (-4), rhod[0]))
         self.nonum = len(rhon)
         self.noden = len(rhod)
@@ -438,9 +437,9 @@ class IIRControllerDesign():
         self.rhod = rhod
         self.rho = np.block([self.rhon, self.rhod])
 
-        self.reset() #set objectives and constraints
+        self.reset()  # set objectives and constraints
 
-        self.a0T, self.b0, self.c0T, self.d0 = self.basis(self.o, self.ts, blist, dlist) #set basis
+        self.a0T, self.b0, self.c0T, self.d0 = self.basis(self.o, self.ts, blist, dlist)  # set basis
 
     def basis(self, o, ts, blist=[], dlist=[]):
         """
@@ -464,7 +463,7 @@ class IIRControllerDesign():
                 b = blist[k]
             cT = np.array([sinv ** i for i in range(self.noden)])
             if not dlist:
-                d = sinv
+                d = 0
             else:
                 d = dlist[k]
             a0T = np.append(a0T, aT)
@@ -498,7 +497,7 @@ class IIRControllerDesign():
         self.sigma = 1 / 2 * (xg ** 2 - 1) / (xg - xp)
         self.rm = xg - self.sigma
 
-    def outofdiskcond(self, rm, sigma):
+    def outofdiskcond(self, rm, sigma, l=None):
         """
         Add SOCP constarints:
         rk - |Lk - simgak| <=0 <--->
@@ -507,7 +506,9 @@ class IIRControllerDesign():
         :param sigma:
         :return:
         """
-        for i in self.l:
+        if l is None:
+            l = self.l
+        for i in l:
             E = np.block([self.g[i] * self.a0T[i], -sigma[i] * self.c0T[i]])
             F = self.g[i] * self.b0[i] - sigma[i] * self.d0[i]
             G = np.block([np.zeros(self.nonum), self.c0T[i]])
@@ -524,7 +525,6 @@ class IIRControllerDesign():
             gq0, hq0 = mycvxopt.qc2socp(A, B, C, D)
             self.Gql.append(gq0)
             self.hql.append(hq0)
-
 
     def nominalcond(self, db=-40):
         """
@@ -555,7 +555,7 @@ class IIRControllerDesign():
         r = rm * np.ones(self.F)
         self.outofdiskcond(r, sigma)
 
-    def gainpositivecond(self, glower=0.):
+    def gainpositivecond(self, glower=np.sqrt(np.finfo(float).eps)):
         """
         (5) any(rho[:len(nopid)] > 0) == True, or any(rho[-nofir:]) > 0 == True if is_notch
         :param glower:
@@ -592,6 +592,20 @@ class IIRControllerDesign():
         else:
             self.Gl = np.block([[self.Gl], [Gl]])
             self.hl = np.block([[self.hl], [hl]])
+
+    def econd_append(self, A, b):
+        """
+        Append condtion to Gl and hl
+        :param Gl:
+        :param hl:
+        :return:
+        """
+        if self.A is None:
+            self.A = A
+            self.b = b
+        else:
+            self.A = np.block([[self.A], [A]])
+            self.b = np.block([[self.b], [b]])
 
     def reset(self):
         """
