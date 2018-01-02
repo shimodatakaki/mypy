@@ -9,6 +9,7 @@ import mysignal
 import mycsv
 from scipy import signal
 import Example1_Single_FRF_Nano_Scale_Servo as ex1
+from sympy import *
 
 DATA = "data/example3_result"
 F = 1000  # number of FRF lines
@@ -18,11 +19,13 @@ PERT = (0, -0.1, 0.1, 0.2, -0.2)  # perturbation
 NDATA = 2 * len(PERT) - 1
 
 
-def plant_data(fig):
+def plant_data(fig, datapath=DATA):
     """
     return FRF
     :return:
     """
+    s = symbols('s')
+
     on = 2 * np.pi * np.array([0, 3950, 5400, 6100, 7100])
     kappa = [1, -1, 0.4, -1.2, 0.9]
     zeta = [0, 0.035, 0.015, 0.015, 0.06]
@@ -57,9 +60,9 @@ def plant_data(fig):
             ol = np.append(ol, o)
             hl = np.append(hl, h)
 
-    myplot.save(fig, save_name=DATA + "/" + str(fig) + "_plant", title="plant",
+    myplot.save(fig, save_name=datapath + "/" + str(fig) + "_plant", title="plant",
                 leg=["plant" + str(i) for i in range(NDATA)])
-    mycsv.save(ol, np.real(hl), np.imag(hl), save_name=DATA + "/example1_plant_frf.csv",
+    mycsv.save(ol, np.real(hl), np.imag(hl), save_name=datapath + "/example1_plant_frf.csv",
                header=("o (rad/s)", "real(FRF)", "imag(FRF)"))
 
     assert len(ol) == len(hl)
@@ -67,7 +70,6 @@ def plant_data(fig):
 
 
 if __name__ == "__main__":
-    from sympy import *
     import os
 
     try:
@@ -75,7 +77,6 @@ if __name__ == "__main__":
     except:
         pass
 
-    s = symbols('s')
 
     fig = -1
     fig, o, g = plant_data(fig)

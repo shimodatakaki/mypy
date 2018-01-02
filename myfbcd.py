@@ -730,26 +730,28 @@ class LFControllerDesign(SuperControllerDesin):
         hl = denupper * np.ones((len(self.denidx), 1))
         self.lcond_append(Gl, hl)
 
-        Gl = np.zeros((1, self.NOP))
-        Gl[0][14] = -1.
-        Gl[0][15] = 1.
-        hl = np.zeros(1)
-        self.lcond_append(Gl, hl)
+        if self.nopc==1:
+            Gl = np.zeros((1, self.NOP))
+            Gl[0][14] = -1.
+            Gl[0][15] = 1.
+            hl = np.zeros(1)
+            self.lcond_append(Gl, hl)
 
-        A = np.zeros((1, self.NOP))
-        A[0][6] = 1  # const freq0
-        b = 2.058536168054191e+09 * np.ones(1)
-        self.econd_append(A, b)
+        if self.nonotch == 3:
+            A = np.zeros((1, self.NOP))
+            A[0][6] = 1  # const freq0
+            b = 2.058536168054191e+09 * np.ones(1)
+            self.econd_append(A, b)
 
-        A = np.zeros((1, self.NOP))
-        A[0][6 + 3] = 1  # const freq
-        b = 3.239231067335693e+09 * np.ones(1)
-        self.econd_append(A, b)
+            A = np.zeros((1, self.NOP))
+            A[0][6 + 3] = 1  # const freq
+            b = 3.239231067335693e+09 * np.ones(1)
+            self.econd_append(A, b)
 
-        A = np.zeros((1, self.NOP))
-        A[0][6 + 6] = 1  # const freq
-        b = 8.170691887679803e+08 * np.ones(1)
-        self.econd_append(A, b)
+            A = np.zeros((1, self.NOP))
+            A[0][6 + 6] = 1  # const freq
+            b = 8.170691887679803e+08 * np.ones(1)
+            self.econd_append(A, b)
 
     def outofdiskcond(self, rm, sigmam, l=None):
         """
