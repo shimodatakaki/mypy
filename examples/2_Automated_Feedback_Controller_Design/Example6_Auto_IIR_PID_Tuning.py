@@ -105,7 +105,6 @@ def optimize(fig, o, g, datapath=DATA):
             rhod = fbc.rhod
 
             fbc.controller()
-            fbc.openloop()
             fbc.reset()
 
             taud = fbc.rhod[0] / fbc.rhod[1]
