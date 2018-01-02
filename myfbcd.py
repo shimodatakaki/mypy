@@ -2,13 +2,173 @@
 
 """
 import mycvxopt
-import numpy as np
-from scipy import signal
-import mysignal
 import mynum
+import numpy as np
 
 
-class ControllerDesign():
+class SuperControllerDesin(object):
+
+    def __init__(self, o, g, ts):
+        """
+        Super initialization.
+        :param o: Frequency Lines (rad/s)
+        :param g: Gain Lines
+        :param ts: Samping period (s)
+        """
+        self.o = o
+        self.g = g.reshape((len(g), 1))
+        self.ts = ts
+        self.l = [i for i in range(len(o))]
+        self.F = len(o)
+        self.reset()  # Objective function and linear inequalties for optimization
+
+    def specification(self, o_dgc, theta_dpm, gdb_dgm, phi_dgc=np.pi / 6, theta_dpm2=np.pi / 4, phi_dgm=np.pi / 6):
+        """
+
+        :param o_dgc: Desired Gain-Crossover Frequency (rad/s)
+        :param theta_dpm: Desired Phase Margin (rad)
+        :param gdb_dgm: Desired Gain Margin (dB)
+        :param phi_dgc: Constraints parameter for dgc
+        :param theta_dpm2: Desired Second Phase Margin (rad)
+        :param phi_dgm: Constraints parameter for dgm
+        :return:
+        """
+        g_dgm = 10 ** (gdb_dgm / 20)
+        self.o_dgc = o_dgc
+        self.phi_dgc = phi_dgc
+        self.theta_dpm = theta_dpm
+        self.g_dgm = g_dgm
+        self.phi_dgm = phi_dgm
+        self.theta_dpm2 = theta_dpm2
+        # A circle that satisfies Gain Margin, Phase Margin, and Second Phase Margin.
+        tm = max(theta_dpm, theta_dpm2)
+        xg = -1 / g_dgm
+        xp, yp = -np.cos(tm), -np.sin(tm)
+        self.sigma = 1 / 2 * (xg ** 2 - 1) / (xg - xp)
+        self.rm = xg - self.sigma
+
+    def gainpositivecond(self, glower=0):
+        """
+        All of parameters must be > 0
+        :param glower:
+        :param nocon:
+        :return:
+        """
+        Gl = -1 * np.eye(self.NOP)
+        hl = - glower * np.ones((len(Gl), 1))
+        self.lcond_append(Gl, hl)
+
+    def outofdiskcond(self, rm, sigmam):
+        """
+        (x-sigma)**2 + y**2 >= rm**2 for all o
+        Overwrite this method.
+        """
+        pass
+
+    def nominalcond(self, db=-40):
+        """
+        Nominal Performance Constraints:
+        (x-1)**2 + y**2 >= |W1(s)|**2, where W1(s) = (self.o_dgc/s) ** m
+        for all o
+        :param db:
+        :return:
+        """
+        self.nominal_sensitivity = db
+        m = db / (-20)
+        r = np.array([(self.o_dgc / self.o[i]) ** m for i in self.l])
+        self.outofdiskcond(r.reshape((self.F, 1)), -1 * np.ones((self.F, 1)))
+
+    def stabilitycond(self, rm=None, sigma=None):
+        """
+        Stability Constaints:
+        (x-sigma)**2 + y**2 >= rm**2
+        for all o
+        :param rm: radius of stability disk
+        :param sigma: center of stability disk
+        :return:
+        """
+        if rm is None:
+            rm = self.rm
+        if sigma is None:
+            sigma = self.sigma * np.ones(self.F)
+        self.outofdiskcond(rm * np.ones((self.F, 1)), sigma.reshape((self.F, 1)))
+
+    def lcond_append(self, Gl, hl):
+        """
+        Append condtion to Gl and hl
+        :param Gl:
+        :param hl:
+        :return:
+        """
+        if self.Gl is None:
+            self.Gl = Gl
+            self.hl = hl
+        else:
+            self.Gl = np.block([[self.Gl], [Gl]])
+            self.hl = np.block([[self.hl], [hl]])
+
+    def econd_append(self, A, b):
+        """
+        Append condtion to Gl and hl
+        :param Gl:
+        :param hl:
+        :return:
+        """
+        if self.A is None:
+            self.A = A
+            self.b = b
+        else:
+            self.A = np.block([[self.A], [A]])
+            self.b = np.block([[self.b], [b]])
+
+    def reset(self):
+        """
+        Reset linear Inequalities Condtions
+        :param nop:
+        :return:
+        """
+        self.c = np.zeros((self.NOP, 1))  # default FIND
+        self.c.reshape((self.NOP, 1))
+        self.Gl, self.hl = None, None
+        self.Gql, self.hql = [], []
+        self.Gsl, self.hsl = [], []
+        self.A, self.b = None, None
+
+    def controller(self):
+        """
+        Calculate controller self.C and openloop FRF self.L
+        Overwrite this method.
+        """
+        self.C = None
+        self.L = None
+
+    def split(self, n):
+        """
+        split data to n parts (into each FRF)
+        :param n:
+        :return:
+        """
+        self.olist = mynum.nsplit(self.o, n)
+        self.controller()
+        self.Clist = mynum.nsplit(self.C, n)
+        self.Llist = mynum.nsplit(self.L, n)
+
+    def calc_gcf(self):
+        """
+        calculate acutual gain crossover frequency
+        :return:
+        """
+        gain_crossover_o = []
+        for o, l in zip(self.olist, self.Llist):
+            for _o, _l in zip(o, l):
+                if not check_disk((_l,), 1, 0):
+                    gain_crossover_o.append(temp)
+                    break
+                temp = _o
+        return np.array(gain_crossover_o) / 2 / np.pi
+
+
+class ControllerDesign(SuperControllerDesin):
     """
     Find a linear FB controller that satisfies desired (given) linear constraints for FB,
     i.e. (1) Gain-Crossover Linear Inequalities (self.o_dgc, self.phi_dgc),
@@ -34,57 +194,28 @@ class ControllerDesign():
         :param nofir:
         :param ts:
         """
-        self.o = o
-        self.g = g
-        self.l = [i for i in range(len(o))]
-        self.F = len(o)
         self.nopid = nopid
         self.nofir = nofir
-        self.NOC = len(nopid) + nofir
+        self.NOP = len(nopid) + nofir
+
+        super().__init__(o, g, ts)
+
         self.phi = np.array([
             np.array([*[c(_o) for c in pid(nopid, taud=taud, ts=ts)],
                       *[c(_o) for c in
                         fir(nofir=nofir, ts=tsfir, is_notch=is_notch, noffset=notch_offset)]])
             for _o in o])
         self.X = np.array([_g * _phi for _g, _phi in zip(g, self.phi)])
-        self.phi.reshape((self.F, self.NOC))
-        self.X.reshape((self.F, self.NOC))
+        self.phi.reshape((self.F, self.NOP))
+        self.X.reshape((self.F, self.NOP))
         self.x, self.y = np.real(self.X), np.imag(self.X)
-        # Objective function and linear inequalties for optimization
-        self.reset()
         # Initial solution
         if rho0 is None:
             if not is_notch:
-                rho0 = np.array([10 ** (-6) if i < len(nopid) else 0 for i in range(self.NOC)])
+                rho0 = np.array([10 ** (-6) if i < len(nopid) else 0 for i in range(self.NOP)])
             else:
-                rho0 = np.array([1 if i == 0 else 0 for i in range(self.NOC)])
+                rho0 = np.array([1 if i == 0 else 0 for i in range(self.NOP)])
         self.rho = rho0
-
-    def specification(self, o_dgc, theta_dpm, gdb_dgm, phi_dgc=np.pi / 6, theta_dpm2=np.pi / 4, phi_dgm=np.pi / 6):
-        """
-
-        :param o_dgc: Desired Gain-Crossover Frequency (rad/s)
-        :param theta_dpm: Desired Phase Margin (rad)
-        :param gdb_dgm: Desired Gain Margin (dB)
-        :param phi_dgc: Constraints parameter for dgc
-        :param theta_dpm2: Desired Second Phase Margin (rad)
-        :param phi_dgm: Constraints parameter for dgm
-        :return:
-        """
-        g_dgm = 10 ** (gdb_dgm / 20)
-        self.o_dgc = o_dgc
-        self.phi_dgc = phi_dgc
-        self.theta_dpm = theta_dpm
-        self.g_dgm = g_dgm
-        self.phi_dgm = phi_dgm
-        self.theta_dpm2 = theta_dpm2
-
-        # A circle that satisfies Gain Margin, Phase Margin, and Second Phase Margin.
-        tm = max(theta_dpm, theta_dpm2)
-        xg = -1 / g_dgm
-        xp, yp = -np.cos(tm), -np.sin(tm)
-        self.sigma = 1 / 2 * (xg ** 2 - 1) / (xg - xp)
-        self.rm = xg - self.sigma
 
     def linecond(self, l, a, b, c=1):
         """
@@ -98,7 +229,7 @@ class ControllerDesign():
         if not l:
             return None
         Gl = np.array([c * self.y - a * self.x for i in l])
-        Gl.reshape((len(l), self.NOC))
+        Gl.reshape((len(l), self.NOP))
         hl = np.ones((len(Gl), 1)) * b
         self.lcond_append(Gl, hl)
 
@@ -164,8 +295,8 @@ class ControllerDesign():
             noconu = len(self.nopid)
         else:
             noconl = len(self.nopid)
-            noconu = self.NOC
-        Gl = np.zeros((noconu - noconl, self.NOC))
+            noconu = self.NOP
+        Gl = np.zeros((noconu - noconl, self.NOP))
         for i in range(len(Gl)):
             Gl[i][i + noconl] = -1.
         hl = - glower * np.ones((len(Gl), 1))
@@ -177,7 +308,7 @@ class ControllerDesign():
         :param ti:Integral Time
         :return:
         """
-        Gl = np.zeros((1, self.NOC))
+        Gl = np.zeros((1, self.NOP))
         Gl[0][0] = 1
         Gl[0][1] = - ti
         hl = 0 * np.ones((1, 1))
@@ -200,65 +331,12 @@ class ControllerDesign():
         """
         if l is None:
             l = self.l
-        L0 = np.dot(self.X, self.rho)
+        L0 = np.dot(self.X, self.rho).reshape((self.F, 1))
         n = L0 - sigma
         Gl = np.array([- np.real(np.conj(n[i]) * self.X[i]) / abs(n[i]) for i in l])
-        Gl.reshape((len(l), self.NOC))
-        hl = np.array([-r[i] - np.real(n[i]) / abs(n[i]) * sigma
-                       for i in l]).reshape((len(l), 1)) * np.ones((len(l), 1))
+        Gl.reshape((len(l), self.NOP))
+        hl = np.array([-r[i] - np.real(n[i]) / abs(n[i]) * sigma[i] for i in l]).reshape((len(l), 1))
         self.lcond_append(Gl, hl)
-
-    def stabilitycond(self, rm=None, sigma=None):
-        """
-        (6) Stability Constaints:
-        (x-sigma)**2 + y**2 >= rm**2
-        for all o
-        :param rm: radius of stability disk
-        :param sigma: center of stability disk
-        :return:
-        """
-        if rm is None:
-            rm = self.rm
-        if sigma is None:
-            sigma = self.sigma
-        assert - sigma >= rm
-        r = rm * np.ones(len(self.l))
-        self.outofdiskcond(r, sigma)
-
-    def nominalcond(self, db=-40):
-        """
-        (8) Nominal Performance Constraints:
-        (x-1)**2 + y**2 >= |W1(s)|**2, where W1(s) = (self.o_dgc/s) ** m
-        for all o
-        :param db:
-        :return:
-        """
-        self.nominal_sensitivity = db
-        m = db / (-20)
-        r = [(self.o_dgc / self.o[i]) ** m for i in self.l]
-        self.outofdiskcond(r, -1)
-
-    def set_obj(self, c):
-        """
-        Optimization objective
-        :param c:
-        :return:
-        """
-        self.c = c
-
-    def lcond_append(self, Gl, hl):
-        """
-        Append condtion to Gl and hl
-        :param Gl:
-        :param hl:
-        :return:
-        """
-        if self.Gl is None:
-            self.Gl = Gl
-            self.hl = hl
-        else:
-            self.Gl = np.block([[self.Gl], [Gl]])
-            self.hl = np.block([[self.hl], [hl]])
 
     def robustcond(self, gamma):
         """
@@ -275,27 +353,13 @@ class ControllerDesign():
         for i in self.l_rbs:
             are, aim = np.real(self.X[i]), np.imag(self.X[i])
             A0 = np.block([[are], [aim]])
-            A0.reshape((2, self.NOC))
+            A0.reshape((2, self.NOP))
             b0 = np.zeros((len(A0), 1))
-            c0 = np.zeros((self.NOC, 1))
+            c0 = np.zeros((self.NOP, 1))
             d0 = gamma
             gq0, hq0 = mycvxopt.qc2socp(A0, b0, c0, d0)
             self.Gql.append(gq0)
             self.hql.append(hq0)
-
-    def econd_append(self, A, b):
-        """
-        Append condtion to Gl and hl
-        :param Gl:
-        :param hl:
-        :return:
-        """
-        if self.A is None:
-            self.A = A
-            self.b = b
-        else:
-            self.A = np.block([[self.A], [A]])
-            self.b = np.block([[self.b], [b]])
 
     def fircond(self, term=0):
         """
@@ -307,8 +371,8 @@ class ControllerDesign():
         EVEN = 0
         ODD = 1
         for j in (EVEN, ODD):
-            A = np.zeros((1, self.NOC))
-            for i in range(self.NOC):
+            A = np.zeros((1, self.NOP))
+            for i in range(self.NOP):
                 k = i - len(self.nopid)
                 if k >= 0 and (k + j) % 2:
                     A[0][i] = 1
@@ -323,8 +387,8 @@ class ControllerDesign():
         :param term:
         :return:
         """
-        A = np.zeros((1, self.NOC))
-        for i in range(self.NOC):
+        A = np.zeros((1, self.NOP))
+        for i in range(self.NOP):
             k = i - len(self.nopid)
             if k >= 0:
                 A[0][i] = 1
@@ -347,7 +411,7 @@ class ControllerDesign():
         return FRF of C(s), CPID(s), or CFIR(s)
         """
         if obj == "c":
-            noc = self.NOC
+            noc = self.NOP
             phi = np.array(self.phi)
             rho = np.array(self.rho)
         elif obj == self.nopid:
@@ -369,18 +433,6 @@ class ControllerDesign():
         assert ret.shape == (self.F,)
         return ret
 
-    def reset(self):
-        """
-        Reset linear Inequalities Condtions
-        :return:
-        """
-        self.c = np.zeros((self.NOC, 1))  # default FIND
-        self.c.reshape((self.NOC, 1))
-        self.Gl, self.hl = None, None
-        self.Gql, self.hql = [], []
-        self.Gsl, self.hsl = [], []
-        self.A, self.b = None, None
-
     def split(self, n):
         """
         split data to n parts (into each FRF)
@@ -391,22 +443,8 @@ class ControllerDesign():
         Xlist = mynum.nsplit(self.X, n)
         self.Llist = [np.dot(X, self.rho) for X in Xlist]
 
-    def calc_gcf(self):
-        """
-        calculate acutual gain crossover frequency
-        :return:
-        """
-        gain_crossover_o = []
-        for o, l in zip(self.olist, self.Llist):
-            for _o, _l in zip(o, l):
-                if not check_disk((_l,), 1, 0):
-                    gain_crossover_o.append(temp)
-                    break
-                temp = _o
-        return np.array(gain_crossover_o) / 2 / np.pi
 
-
-class IIRControllerDesign():
+class IIRControllerDesign(SuperControllerDesin):
 
     def __init__(self, o, g, ts=50 * 10 ** (-6), rhon=[], rhod=[], blist=[], dlist=[]):
         """
@@ -420,24 +458,19 @@ class IIRControllerDesign():
         :param rhon: numerator parameter
         :param rhod: denominator parameter
         """
-        self.o = o
-        self.g = g
-        self.ts = ts
-        self.F = len(o)
-        self.l = [i for i in range(self.F)]
-
         if rhod == []:
             rhod = np.array([5 * ts, 1])
         if rhon == []:
             rhon = np.array(pidtaud2b(0.2, 200, 10 ** (-4), rhod[0]))
         self.nonum = len(rhon)
         self.noden = len(rhod)
-        self.NOC = self.nonum + self.noden
+        self.NOP = self.nonum + self.noden
+
+        super().__init__(o, g, ts)
+
         self.rhon = rhon
         self.rhod = rhod
         self.rho = np.block([self.rhon, self.rhod])
-
-        self.reset()  # set objectives and constraints
 
         self.a0T, self.b0, self.c0T, self.d0 = self.basis(self.o, self.ts, blist, dlist)  # set basis
 
@@ -472,31 +505,6 @@ class IIRControllerDesign():
             d0 = np.append(d0, d)
         return a0T.reshape((len(o), self.nonum)), b0, c0T.reshape((len(o), self.noden)), d0
 
-    def specification(self, o_dgc, theta_dpm, gdb_dgm, phi_dgc=np.pi / 6, theta_dpm2=np.pi / 4, phi_dgm=np.pi / 6):
-        """
-
-        :param o_dgc: Desired Gain-Crossover Frequency (rad/s)
-        :param theta_dpm: Desired Phase Margin (rad)
-        :param gdb_dgm: Desired Gain Margin (dB)
-        :param phi_dgc: Constraints parameter for dgc
-        :param theta_dpm2: Desired Second Phase Margin (rad)
-        :param phi_dgm: Constraints parameter for dgm
-        :return:
-        """
-        g_dgm = 10 ** (gdb_dgm / 20)
-        self.o_dgc = o_dgc
-        self.phi_dgc = phi_dgc
-        self.theta_dpm = theta_dpm
-        self.g_dgm = g_dgm
-        self.phi_dgm = phi_dgm
-        self.theta_dpm2 = theta_dpm2
-        # A circle that satisfies Gain Margin, Phase Margin, and Second Phase Margin.
-        tm = max(theta_dpm, theta_dpm2)
-        xg = -1 / g_dgm
-        xp, yp = -np.cos(tm), -np.sin(tm)
-        self.sigma = 1 / 2 * (xg ** 2 - 1) / (xg - xp)
-        self.rm = xg - self.sigma
-
     def outofdiskcond(self, rm, sigma, l=None):
         """
         Add SOCP constarints:
@@ -513,8 +521,8 @@ class IIRControllerDesign():
             F = self.g[i] * self.b0[i] - sigma[i] * self.d0[i]
             G = np.block([np.zeros(self.nonum), self.c0T[i]])
             H = self.d0[i]
-            E.reshape((1, self.NOC))
-            G.reshape((1, self.NOC))
+            E.reshape((1, self.NOP))
+            G.reshape((1, self.NOP))
             n0 = np.dot(E, self.rho) + F
             I = np.real(np.conj(n0) * E) / abs(n0)
             J = np.real(np.conj(n0) * F) / abs(n0)
@@ -526,35 +534,6 @@ class IIRControllerDesign():
             self.Gql.append(gq0)
             self.hql.append(hq0)
 
-    def nominalcond(self, db=-40):
-        """
-        (8) Nominal Performance Constraints:
-        (x-1)**2 + y**2 >= |W1(s)|**2, where W1(s) = (self.o_dgc/s) ** m
-        for all o
-        :param db:
-        :return:
-        """
-        self.nominal_sensitivity = db
-        m = db / (-20)
-        r = [(self.o_dgc / self.o[i]) ** m for i in self.l]
-        self.outofdiskcond(r, -1 * np.ones(self.F))
-
-    def stabilitycond(self, rm=None, sigma=None):
-        """
-        (6) Stability Constaints:
-        (x-sigma)**2 + y**2 >= rm**2
-        for all o
-        :param rm: radius of stability disk
-        :param sigma: center of stability disk
-        :return:
-        """
-        if rm is None:
-            rm = self.rm
-        if sigma is None:
-            sigma = self.sigma * np.ones(self.F)
-        r = rm * np.ones(self.F)
-        self.outofdiskcond(r, sigma)
-
     def gainpositivecond(self, glower=np.sqrt(np.finfo(float).eps)):
         """
         (5) any(rho[:len(nopid)] > 0) == True, or any(rho[-nofir:]) > 0 == True if is_notch
@@ -562,9 +541,7 @@ class IIRControllerDesign():
         :param nocon:
         :return:
         """
-        Gl = -1 * np.eye(self.NOC)
-        hl = - glower * np.ones((len(Gl), 1))
-        self.lcond_append(Gl, hl)
+        super().gainpositivecond(glower=glower)
 
     def optimize(self, solver="socp"):
         """
@@ -579,59 +556,6 @@ class IIRControllerDesign():
         self.rhod = self.rho[self.nonum:]
         return self.rho
 
-    def lcond_append(self, Gl, hl):
-        """
-        Append condtion to Gl and hl
-        :param Gl:
-        :param hl:
-        :return:
-        """
-        if self.Gl is None:
-            self.Gl = Gl
-            self.hl = hl
-        else:
-            self.Gl = np.block([[self.Gl], [Gl]])
-            self.hl = np.block([[self.hl], [hl]])
-
-    def econd_append(self, A, b):
-        """
-        Append condtion to Gl and hl
-        :param Gl:
-        :param hl:
-        :return:
-        """
-        if self.A is None:
-            self.A = A
-            self.b = b
-        else:
-            self.A = np.block([[self.A], [A]])
-            self.b = np.block([[self.b], [b]])
-
-    def reset(self):
-        """
-        Reset linear Inequalities Condtions
-        :return:
-        """
-        self.c = np.zeros((self.NOC, 1))  # default FIND
-
-        self.c.reshape((self.NOC, 1))
-        self.Gl, self.hl = None, None
-        self.Gql, self.hql = [], []
-        self.Gsl, self.hsl = [], []
-        self.A, self.b = None, None
-
-    def split(self, n):
-        """
-        split data to n parts (into each FRF)
-        :param n:
-        :return:
-        """
-        self.olist = mynum.nsplit(self.o, n)
-        self.controller()
-        self.Clist = mynum.nsplit(self.C, n)
-        self.openloop()
-        self.Llist = mynum.nsplit(self.L, n)
-
     def controller(self):
         """
         calculate controller response
@@ -640,67 +564,226 @@ class IIRControllerDesign():
         self.C = np.array([
             (np.dot(self.a0T[i], self.rhon) + self.b0[i]) / (np.dot(self.c0T[i], self.rhod) + self.d0[i])
             for i in self.l])
+        self.L = self.g.reshape((self.F, 1)) * self.C.reshape((self.F, 1))
 
-    def openloop(self):
+
+class LFControllerDesign(SuperControllerDesin):
+
+    def __init__(self, o, g, ts, rho, ctype=["pid", 3, 1]):
         """
-        calculate open loop response
+        Linear Fractional Controller Design:
+        Ck = prod( (aiTk*xi + bik)/(ciTk*xi+dik) for i in (0, 1, 2 ...))
+        :param o:
+        :param g:
+        :param ts:
+        :param rho:
+        :param ctype: [pid, number of notch filters, number of phase compensator filters]
+        """
+
+        self.nopid = (3, 2)  # num, den
+        self.nonotch = ctype[1]
+        self.nopc = ctype[2]
+        B2, B1, B0, A2, A1 = 0, 1, 2, 3, 4
+        LENPID = 5
+        D1, D2, C1 = 5, 6, 7
+        # PIDtaud
+        self.numidx = [B2, B1, B0]
+        self.denidx = [A2, A1]
+        self.sepidx = [0, LENPID]
+        # Notch
+        for i in range(self.nonotch):
+            self.numidx.append(D1 + 3 * i)
+            self.denidx.append(D2 + 3 * i)
+            self.denidx.append(C1 + 3 * i)
+            self.sepidx.append(self.sepidx[-1] + 3)
+        # Phase Compensator
+        for i in range(self.nopc):
+            F1 = self.sepidx[-1]
+            E1 = F1 + 1
+            self.numidx.append(F1 + 2 * i)
+            self.denidx.append(E1 + 2 * i)
+            self.sepidx.append(self.sepidx[-1] + 2)
+
+        self.NOP = len(self.numidx) + len(self.denidx)
+        super().__init__(o, g, ts)
+        self.g = self.g.reshape((len(g), 1))
+
+        self.rho = rho  # [rho[i] for i in range(NOSC)]
+        self.NOSC = len(rho)  # number of series controllers
+        self.rho0 = np.array([item for sublist in rho for item in sublist]).reshape((self.NOP, 1))
+
+        self.sinv = calc_sinv(o, ts)
+
+    def pidbasis(self):
+        """
+        basis of pids:
+        Cpid = N*rhopid/D*rhopid, where
+        rhopid = [b2, b1, b0, a1, a0]
+        numerator N: [1, sinv, sinv**2, 0, 0]
+        denominator D: [0, 0, 0, 1, sinv]
         :return:
         """
+        phia = phi(self.l, self.sinv, self.nopid[0])
+        zeroa = np.zeros(self.nopid[1])
+        aT = np.array([np.array([*phia[k], *zeroa]) for k in self.l])
+        phic = phi(self.l, self.sinv, self.nopid[1])
+        zeroc = np.zeros(self.nopid[0])
+        cT = np.array([np.array([*zeroc, *phic[k]]) for k in self.l])
+        b = np.zeros(self.F)
+        d = np.zeros(self.F)
+        return aT, b, cT, d
+
+    def notchbasis(self):
+        """
+        basis of notch filter:
+        Cnotch = (N * rhonotch + 1) / (D*notch + 1), where
+        rhonotch = [d1, d2, c1]
+        N: [sinv, siinv**2, 0]
+        D: [0, sinv**2, sinv]
+        :return:
+        """
+        phia = phi(self.l, self.sinv, 3, ioffset=1)  # [sinv, sinv**2]
+        zeroa = np.zeros(1)
+        aT = np.array([np.array([*phia[k], *zeroa]) for k in self.l])
+        cT = np.array([aT[k][::-1] for k in self.l])
+        b = np.ones(self.F)
+        d = np.ones(self.F)
+        return aT, b, cT, d
+
+    def pcbasis(self):
+        """
+        Basis of phase compensator filter
+        Cp = (N * rhocp + 1) / (D * rhon + 1)
+        rhonotch = [f1, e1]
+        N: [sinv, 0]
+        D: [0, sinv]
+        :return:
+        """
+        phia = phi(self.l, self.sinv, 2, ioffset=1)  # [sinv]
+        zeroa = np.zeros(1)
+        aT = np.array([np.array([*phia[k], *zeroa]) for k in self.l])
+        cT = np.array([aT[k][::-1] for k in self.l])
+        b = np.ones(self.F)
+        d = np.ones(self.F)
+        return aT, b, cT, d
+
+    def setbasis(self):
+        """
+        set each basis function
+        :return:
+        """
+        # PID
+        self.aT = []
+        self.b = []
+        self.cT = []
+        self.d = []
+
+        aT, b, cT, d = self.pidbasis()
+        if self.nopid:
+            self.aT.append(aT)
+            self.b.append(b)
+            self.cT.append(cT)
+            self.d.append(d)
+        aT, b, cT, d = self.notchbasis()
+        for n in range(self.nonotch):
+            self.aT.append(aT)
+            self.b.append(b)
+            self.cT.append(cT)
+            self.d.append(d)
+        aT, b, cT, d = self.pcbasis()
+        for n in range(self.nopc):
+            self.aT.append(aT)
+            self.b.append(b)
+            self.cT.append(cT)
+            self.d.append(d)
+
+    def controller(self):
+        """
+        set controller
+        :return:
+        """
+
+        def frac_numden(rho, aT, b):
+            return [np.array([affine(rho[i], aT[i][k], b[i][k])
+                              for k in self.l]) for i in range(self.NOSC)]
+
+        self.setbasis()
+        self.alpha = frac_numden(self.rho, self.aT, self.b)
+        self.gamma = frac_numden(self.rho, self.cT, self.d)
+        self.C = lf_controller(self.l, self.NOSC, self.alpha, self.gamma)
         self.L = self.g * self.C
 
-    def calc_gcf(self):
+    def gaincond(self, denlower=0.8, denupper=1.2):
         """
-        calculate acutual gain crossover frequency
+        denominator parameters should not be largely changed because of linearization
         :return:
         """
-        gain_crossover_o = []
-        for o, l in zip(self.olist, self.Llist):
-            for _o, _l in zip(o, l):
-                if not check_disk((_l,), 1, 0):
-                    gain_crossover_o.append(temp)
-                    break
-                temp = _o
-        return np.array(gain_crossover_o) / 2 / np.pi
+        # parameter change limitted within -20 % ~ 20 %
+        Gl = np.zeros((len(self.denidx), self.NOP))
+        for j, i in enumerate(self.denidx):
+            Gl[j][i] = -1. / self.rho0[i]
+        hl = - denlower * np.ones((len(self.denidx), 1))
+        self.lcond_append(Gl, hl)
+        Gl = np.zeros((len(self.denidx), self.NOP))
+        for j, i in enumerate(self.denidx):
+            Gl[j][i] = 1. / self.rho0[i]
+        hl = denupper * np.ones((len(self.denidx), 1))
+        self.lcond_append(Gl, hl)
 
+        Gl = np.zeros((1, self.NOP))
+        Gl[0][14] = -1.
+        Gl[0][15] = 1.
+        hl = np.zeros(1)
+        self.lcond_append(Gl, hl)
 
-def pidtaud2b(kp, ki, kd, taud):
-    """
-    PIDtauD to b vector
-    :param kp:
-    :param ki:
-    :param kd:
-    :param taud:
-    :return:
-    """
-    b0 = ki
-    b1 = kp + ki * taud
-    b2 = kd + kp * taud
-    return [b2, b1, b0]
+        A = np.zeros((1, self.NOP))
+        A[0][6] = 1  # const freq0
+        b = 2.058536168054191e+09 * np.ones(1)
+        self.econd_append(A, b)
 
+        A = np.zeros((1, self.NOP))
+        A[0][6 + 3] = 1  # const freq
+        b = 3.239231067335693e+09 * np.ones(1)
+        self.econd_append(A, b)
 
-def btaud2pid(b, taud):
-    """
-    b vector to PIDtauD
-    :param b:
-    :param taud:
-    :return:
-    """
-    ki = b[2]
-    kp = b[1] - ki * taud
-    kd = b[0] - kp * taud
-    return kp, ki, kd
+        A = np.zeros((1, self.NOP))
+        A[0][6 + 6] = 1  # const freq
+        b = 8.170691887679803e+08 * np.ones(1)
+        self.econd_append(A, b)
 
+    def outofdiskcond(self, rm, sigmam, l=None):
+        """
+        out of disk
+        :param rm:
+        :param sigmam:
+        :param l:
+        :return:
+        """
+        if l is None:
+            l = self.l
+        A = self.L * np.ones((self.F, self.NOP))
+        for k in self.l:
+            a = [self.aT[i][k] / self.alpha[i][k] - self.cT[i][k] / self.gamma[i][k]
+                 for i in range(self.NOSC)]
+            A[k] = np.array([item for sublist in a for item in sublist])
+        A *= self.L
+        R = self.L - sigmam
+        Gl = - np.real(np.conj(R) * A) / abs(R)
+        hl = -rm + abs(R) + np.dot(Gl, self.rho0)
+        self.lcond_append(Gl, hl)
 
-class Simulation():
-    def __init__(self, s, plant, controller):
-        l = plant * controller
-        t = l / (1 + l)
-        self.T = mysignal.symbolic_to_tf(t, s)
-        self.S = 1 - self.T
-
-    def step(self):
-        t, yout = signal.step2(self.T)
-        return t, yout
+    def optimize(self, solver="lp"):
+        """
+        Available Solvers: Linear Programming (of course including min infinity-norm/1-norm), Quadratic Prgramming,
+        Second-Order Cone Prgramming, Semi-Definite Progamming (or LMI)
+        :param solver:
+        :return:
+        """
+        rhovec = mycvxopt.solve(solver, [self.c], G=self.Gl, h=self.hl, Gql=self.Gql, hql=self.hql, Gsl=self.Gsl,
+                                hsl=self.hsl, A=self.A, b=self.b, MAX_ITER_SOL=1)
+        self.rho0 = rhovec.reshape((self.NOP, 1))
+        self.rho = [rhovec[self.sepidx[i]:self.sepidx[i + 1]] for i in range(len(self.sepidx) - 1)]
+        return self.rho
 
 
 def pid(nopid, taud, ts=0.0):
@@ -774,6 +857,86 @@ def check_disk(l, r, sigma):
     :param sigma:
     :return:
     """
-
     x, y = np.real(l), np.imag(l)
     return all((xp - sigma) ** 2 + yp ** 2 >= r ** 2 for xp, yp in zip(x, y))
+
+
+def pidtaud2b(kp, ki, kd, taud):
+    """
+    PIDtauD to b vector
+    :param kp:
+    :param ki:
+    :param kd:
+    :param taud:
+    :return:
+    """
+    b0 = ki
+    b1 = kp + ki * taud
+    b2 = kd + kp * taud
+    return [b2, b1, b0]
+
+
+def btaud2pid(b, taud):
+    """
+    b vector to PIDtauD
+    :param b:
+    :param taud:
+    :return:
+    """
+    ki = b[2]
+    kp = b[1] - ki * taud
+    kd = b[0] - kp * taud
+    return kp, ki, kd
+
+
+def calc_sinv(o, ts):
+    """
+    return [sinv[0], sinv[1], ..., sinv[F]] for o[0], ..., o[F}
+    :param o:
+    :param ts:
+    :return:
+    """
+    sinv = np.zeros(len(o), dtype=complex)
+    for k, ok in enumerate(o):
+        s = 1.j * ok
+        zi = np.exp(- ts * s)
+        # Inverse bilinear transform is used to avoid ill condition @ z=-1
+        sinv[k] = (ts * (1 + zi)) / (2 * (1 - zi))
+    return sinv
+
+
+def phi(l, sinv, n, ioffset=0):
+    """
+    return [sinv**i for i=(ioffset, ..., n-1)] for all k
+    :param l:
+    :param sinv:
+    :param n:
+    :param ioffset:
+    :return:
+    """
+    return np.array([np.array([sinv[k] ** i for i in range(ioffset, n)]) for k in l])
+
+
+def affine(x, aT, b):
+    """
+    return aT * x + b
+    :param x:
+    :param aT:
+    :param b:
+    :return:
+    """
+    return np.dot(aT, x) + b
+
+
+def lf_controller(l, nosc, alpha, gamma):
+    """
+    Linear Fractional Controller:
+    C[k] = prod(alpha[k][i]/gamma[k][i] for i in range(nosc))
+    :param l: frequency lines
+    :param nosc: number of series controllers
+    :param alpha: k-th frequency response of numerator of i-th controller
+    :param gamma: k-th frequency response of denominator of i-th controller
+    :return: np.array(C[k] for k in l])
+    """
+    C = np.array([np.prod([alpha[i][k] / gamma[i][k] for i in range(nosc)]) for k in l])
+    return C.reshape((len(l), 1))
