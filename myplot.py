@@ -15,6 +15,14 @@ def show():
     plt.show()
 
 
+def loadtex():
+    """
+    load tex settings
+    :return:
+    """
+    plt.rc('text', usetex=True)
+
+
 def save(fig, save_name="", leg=None, text=None, formats=("png", "pdf"), title="", xl=None, yl=None, label=None):
     """
     save figure to file if leg and save_name given
