@@ -45,6 +45,7 @@ class SuperControllerDesin(object):
         xg = -1 / g_dgm
         xp, yp = -np.cos(tm), -np.sin(tm)
         self.sigma = 1 / 2 * (xg ** 2 - 1) / (xg - xp)
+        self.sigma = self.sigma * np.ones((self.F, 1))
         self.rm = xg - self.sigma
 
     def gainpositivecond(self, glower=0):
@@ -58,14 +59,14 @@ class SuperControllerDesin(object):
         hl = - glower * np.ones((len(Gl), 1))
         self.lcond_append(Gl, hl)
 
-    def outofdiskcond(self, rm, sigmam):
+    def outofdiskcond(self, rm, sigmam, l=None):
         """
         (x-sigma)**2 + y**2 >= rm**2 for all o
         Overwrite this method.
         """
         pass
 
-    def nominalcond(self, db=-40):
+    def nominalcond(self, db=-40, l=None):
         """
         Nominal Performance Constraints:
         (x-1)**2 + y**2 >= |W1(s)|**2, where W1(s) = (self.o_dgc/s) ** m
@@ -75,8 +76,11 @@ class SuperControllerDesin(object):
         """
         self.nominal_sensitivity = db
         m = db / (-20)
-        r = np.array([(self.o_dgc / self.o[i]) ** m for i in self.l])
-        self.outofdiskcond(r.reshape((self.F, 1)), -1 * np.ones((self.F, 1)))
+        if l is None:
+            l = self.l
+        F = len(l)
+        r = np.array([(self.o_dgc / self.o[i]) ** m for i in l]).reshape((F, 1))
+        self.outofdiskcond(r, -1 * np.ones((F, 1)), l)
 
     def stabilitycond(self, rm=None, sigma=None):
         """
@@ -90,8 +94,8 @@ class SuperControllerDesin(object):
         if rm is None:
             rm = self.rm
         if sigma is None:
-            sigma = self.sigma * np.ones(self.F)
-        self.outofdiskcond(rm * np.ones((self.F, 1)), sigma.reshape((self.F, 1)))
+            sigma = self.sigma
+        self.outofdiskcond(rm, sigma)
 
     def lcond_append(self, Gl, hl):
         """
@@ -153,15 +157,48 @@ class SuperControllerDesin(object):
         self.Clist = mynum.nsplit(self.C, n)
         self.Llist = mynum.nsplit(self.L, n)
 
-    def calc_gcf(self):
+    def check_stability(self, rm=None, sigma=None):
         """
-        calculate acutual gain crossover frequency
+        check if stability condition is satisfied
+        :param rm:
+        :param sigma:
+        :return:
+        """
+        if rm is None:
+            rm = self.rm
+        if sigma is None:
+            sigma = self.sigma
+        return check_disk(self.L, rm, sigma)
+
+    def check_nominal(self, db, l=None):
+        """
+        check if nominal sensitivity condition is satisfied
+        :param db:
+        :param l:
+        :return:
+        """
+        if l is None:
+            l = self.l
+        L = [self.L[i] for i in l]
+        F = len(l)
+        m = db / (-20)
+        r = np.array([(self.o_dgc / self.o[i]) ** m for i in l]).reshape((F, 1))
+        return check_disk(L, r, -1 * np.ones((F, 1)))
+
+    def calc_gcf(self, mode="g"):
+        """
+        calculate X-crossover frequency
+        :param mode: if "g" then X:gain, elif "s" then X:sensitivity
         :return:
         """
         gain_crossover_o = []
         for o, l in zip(self.olist, self.Llist):
             for _o, _l in zip(o, l):
-                if not check_disk((_l,), 1, 0):
+                if mode == "g":
+                    x = _l  # open loop
+                elif mode == "s":
+                    x = _l + 1  # sensitivity
+                if not check_disk((x,), np.ones(len(_l)), np.zeros(len(_l))):
                     gain_crossover_o.append(temp)
                     break
                 temp = _o
@@ -608,13 +645,24 @@ class LFControllerDesign(SuperControllerDesin):
         super().__init__(o, g, ts)
         self.g = self.g.reshape((len(g), 1))
 
+        self.set_rho0(rho)
+
+        self.sinv = calc_sinv(o, ts)
+
+        self.NOC = int(ctype[0] != "") + sum(int(x > 0) for x in ctype[1:])
+        # for reusing phi
+        self.phia = []
+        self.phic = []
+        for i in range(self.NOC):
+            self.phia.append(None)
+            self.phic.append(None)
+
+    def set_rho0(self, rho):
         self.rho = rho  # [rho[i] for i in range(NOSC)]
         self.NOSC = len(rho)  # number of series controllers
         self.rho0 = np.array([item for sublist in rho for item in sublist]).reshape((self.NOP, 1))
 
-        self.sinv = calc_sinv(o, ts)
-
-    def pidbasis(self):
+    def pidbasis(self, i):
         """
         basis of pids:
         Cpid = N*rhopid/D*rhopid, where
@@ -623,17 +671,20 @@ class LFControllerDesign(SuperControllerDesin):
         denominator D: [0, 0, 0, 1, sinv]
         :return:
         """
-        phia = phi(self.l, self.sinv, self.nopid[0])
+        if self.phia[i] is None:
+            self.phia[i] = phi(self.l, self.sinv, self.nopid[0])
+            self.phic[i] = phi(self.l, self.sinv, self.nopid[1])
+        phia = self.phia[i]
+        phic = self.phic[i]
         zeroa = np.zeros(self.nopid[1])
         aT = np.array([np.array([*phia[k], *zeroa]) for k in self.l])
-        phic = phi(self.l, self.sinv, self.nopid[1])
         zeroc = np.zeros(self.nopid[0])
         cT = np.array([np.array([*zeroc, *phic[k]]) for k in self.l])
         b = np.zeros(self.F)
         d = np.zeros(self.F)
         return aT, b, cT, d
 
-    def notchbasis(self):
+    def notchbasis(self, i):
         """
         basis of notch filter:
         Cnotch = (N * rhonotch + 1) / (D*notch + 1), where
@@ -642,7 +693,9 @@ class LFControllerDesign(SuperControllerDesin):
         D: [0, sinv**2, sinv]
         :return:
         """
-        phia = phi(self.l, self.sinv, 3, ioffset=1)  # [sinv, sinv**2]
+        if self.phia[i] is None:
+            self.phia[i] = phi(self.l, self.sinv, 3, ioffset=1)  # [sinv, sinv**2]
+        phia = self.phia[i]
         zeroa = np.zeros(1)
         aT = np.array([np.array([*phia[k], *zeroa]) for k in self.l])
         cT = np.array([aT[k][::-1] for k in self.l])
@@ -650,7 +703,7 @@ class LFControllerDesign(SuperControllerDesin):
         d = np.ones(self.F)
         return aT, b, cT, d
 
-    def pcbasis(self):
+    def pcbasis(self, i):
         """
         Basis of phase compensator filter
         Cp = (N * rhocp + 1) / (D * rhon + 1)
@@ -659,7 +712,9 @@ class LFControllerDesign(SuperControllerDesin):
         D: [0, sinv]
         :return:
         """
-        phia = phi(self.l, self.sinv, 2, ioffset=1)  # [sinv]
+        if self.phia[i] is None:
+            self.phia[i] = phi(self.l, self.sinv, 2, ioffset=1)  # [sinv]
+        phia = self.phia[i]
         zeroa = np.zeros(1)
         aT = np.array([np.array([*phia[k], *zeroa]) for k in self.l])
         cT = np.array([aT[k][::-1] for k in self.l])
@@ -678,24 +733,30 @@ class LFControllerDesign(SuperControllerDesin):
         self.cT = []
         self.d = []
 
-        aT, b, cT, d = self.pidbasis()
+        i = 0
+
+        aT, b, cT, d = self.pidbasis(i)
         if self.nopid:
             self.aT.append(aT)
             self.b.append(b)
             self.cT.append(cT)
             self.d.append(d)
-        aT, b, cT, d = self.notchbasis()
-        for n in range(self.nonotch):
-            self.aT.append(aT)
-            self.b.append(b)
-            self.cT.append(cT)
-            self.d.append(d)
-        aT, b, cT, d = self.pcbasis()
-        for n in range(self.nopc):
-            self.aT.append(aT)
-            self.b.append(b)
-            self.cT.append(cT)
-            self.d.append(d)
+        if self.nonotch:
+            i += 1
+            aT, b, cT, d = self.notchbasis(i)
+            for n in range(self.nonotch):
+                self.aT.append(aT)
+                self.b.append(b)
+                self.cT.append(cT)
+                self.d.append(d)
+        if self.nopc:
+            i += 1
+            aT, b, cT, d = self.pcbasis(i)
+            for n in range(self.nopc):
+                self.aT.append(aT)
+                self.b.append(b)
+                self.cT.append(cT)
+                self.d.append(d)
 
     def controller(self):
         """
@@ -730,7 +791,7 @@ class LFControllerDesign(SuperControllerDesin):
         hl = denupper * np.ones((len(self.denidx), 1))
         self.lcond_append(Gl, hl)
 
-        if self.nopc==1:
+        if self.nopc == 1:
             Gl = np.zeros((1, self.NOP))
             Gl[0][14] = -1.
             Gl[0][15] = 1.
@@ -763,13 +824,15 @@ class LFControllerDesign(SuperControllerDesin):
         """
         if l is None:
             l = self.l
-        A = self.L * np.ones((self.F, self.NOP))
-        for k in self.l:
+        F = len(l)
+        L = np.array([self.L[i] for i in l]).reshape((F, 1))
+        A = np.ones((F, self.NOP), dtype=np.complex_)
+        for j, k in enumerate(l):
             a = [self.aT[i][k] / self.alpha[i][k] - self.cT[i][k] / self.gamma[i][k]
                  for i in range(self.NOSC)]
-            A[k] = np.array([item for sublist in a for item in sublist])
-        A *= self.L
-        R = self.L - sigmam
+            A[j] = np.array([item for sublist in a for item in sublist])
+        A *= L
+        R = L - sigmam
         Gl = - np.real(np.conj(R) * A) / abs(R)
         hl = -rm + abs(R) + np.dot(Gl, self.rho0)
         self.lcond_append(Gl, hl)
@@ -851,7 +914,7 @@ def fir(nofir, ts, is_notch=False, noffset=0):
         return [nfirnotch(i) for i in (0, *range(noffset, noffset + nofir - 1))]
 
 
-def check_disk(l, r, sigma):
+def check_disk(L, r, sigma):
     """
     return if all of L(s) is out of the disk (radius:r, center:(sigma, 0))
     :param l:
@@ -859,8 +922,25 @@ def check_disk(l, r, sigma):
     :param sigma:
     :return:
     """
-    x, y = np.real(l), np.imag(l)
-    return all((xp - sigma) ** 2 + yp ** 2 >= r ** 2 for xp, yp in zip(x, y))
+    if len(r) == 1:
+        r = r * np.ones(len(L))
+        simga = sigma * np.ones(len(L))
+    x, y = np.real(L), np.imag(L)
+    return all((x[i] - sigma[i]) ** 2 + y[i] ** 2 >= r[i] ** 2 for i in range(len(L)))
+
+
+def nominalcond(db=-40, l=None):
+    """
+    Nominal Performance Constraints:
+    (x-1)**2 + y**2 >= |W1(s)|**2, where W1(s) = (self.o_dgc/s) ** m
+    for all o
+    :param db:
+    :return:
+    """
+    self.nominal_sensitivity = db
+    m = db / (-20)
+    r = np.array([(self.o_dgc / self.o[i]) ** m for i in l])
+    self.outofdiskcond(r.reshape((l, 1)), -1 * np.ones((l, 1)), l)
 
 
 def pidtaud2b(kp, ki, kd, taud):
