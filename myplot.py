@@ -6,6 +6,13 @@ import matplotlib.pyplot as plt
 from scipy import signal
 from scipy.fftpack import fft
 
+def clear_all():
+    """
+    clear all figures
+    :return:
+    """
+    plt.clf()
+
 
 def show():
     """
