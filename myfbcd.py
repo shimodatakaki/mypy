@@ -198,7 +198,7 @@ class SuperControllerDesin(object):
                     x = _l  # open loop
                 elif mode == "s":
                     x = _l + 1  # sensitivity
-                if not check_disk((x,), np.ones(len(_l)), np.zeros(len(_l))):
+                if not check_disk((x,), np.ones(1), np.zeros(1)):
                     gain_crossover_o.append(temp)
                     break
                 temp = _o
@@ -442,6 +442,14 @@ class ControllerDesign(SuperControllerDesin):
         self.rho = mycvxopt.solve(solver, [self.c], G=self.Gl, h=self.hl, Gql=self.Gql, hql=self.hql, Gsl=self.Gsl,
                                   hsl=self.hsl, A=self.A, b=self.b, MAX_ITER_SOL=1)
         return self.rho
+
+    def controller(self):
+        """
+        Calculate controller and openloop frequency response
+        :return:
+        """
+        self.C = np.dot(self.phi, self.rho)
+        self.L = np.dot(self.X, self.rho)
 
     def freqresp(self, obj="c"):
         """
