@@ -78,9 +78,8 @@ class SuperControllerDesin(object):
         m = db / (-20)
         if l is None:
             l = self.l
-        F = len(l)
-        r = np.array([(self.o_dgc / self.o[i]) ** m for i in l]).reshape((F, 1))
-        self.outofdiskcond(r, -1 * np.ones((F, 1)), l)
+        r = np.array([(self.o_dgc / self.o[i]) ** m for i in self.l]).reshape((self.F, 1))
+        self.outofdiskcond(r, -1 * np.ones((self.F, 1)), l)
 
     def stabilitycond(self, rm=None, sigma=None):
         """
@@ -368,11 +367,12 @@ class ControllerDesign(SuperControllerDesin):
         """
         if l is None:
             l = self.l
+        F = len(l)
         L0 = np.dot(self.X, self.rho).reshape((self.F, 1))
         n = L0 - sigma
         Gl = np.array([- np.real(np.conj(n[i]) * self.X[i]) / abs(n[i]) for i in l])
-        Gl.reshape((len(l), self.NOP))
-        hl = np.array([-r[i] - np.real(n[i]) / abs(n[i]) * sigma[i] for i in l]).reshape((len(l), 1))
+        Gl.reshape((F, self.NOP))
+        hl = np.array([-r[i] - np.real(n[i]) / abs(n[i]) * sigma[i] for i in l]).reshape((F, 1))
         self.lcond_append(Gl, hl)
 
     def robustcond(self, gamma):
