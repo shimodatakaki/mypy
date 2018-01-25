@@ -139,7 +139,7 @@ class Excitation():
                 write_str += str(u) + ", "
                 if i and not i % max_line_number:
                     write_str += "\n"
-            f.write(write_str + "};")
+            f.write(write_str + "};\n")
 
 
 class Simulation():
@@ -224,8 +224,8 @@ class SystemIdentification():
         uy_f_noise_data = [fft(x_data) * 2 / non for x_data in uy_noise_data]
         # [Udata(f),Ydata(f)] for f in f_lines, removing index not in l_lines, hence no need to remove [N//2:N] of fft(x)
         uy_f_noise_data = [[x_f for i, x_f in enumerate(x_f_data)
-                            if (not i / (noi - transient) in l_lines) and
-                            (l_lines[0] <= i / (noi - transient) <= l_lines[-1])]
+                            if (not i / (noi - transient) in l_lines) and (
+                                    l_lines[0] <= i / (noi - transient) <= l_lines[-1])]
                            for x_f_data in uy_f_noise_data]
         self.uy_noise_f = [x for x in zip(*uy_f_noise_data)]
         freq_noise = self.fs / non * np.linspace(0, non // 2 - 1, non // 2)
@@ -296,9 +296,7 @@ class SystemIdentification():
             [-line for mat in (np.real(r), np.imag(r)) for line in mat])
         r_re = r_re.reshape(len(r_re), 1)
         theta = - np.linalg.inv(j_re.T * j_re) * j_re.T * np.matrix(r_re)
-        theta = np.insert(np.array(theta.T)[0], 0, 1)  # [1, theta]
-        theta = stablize_theta(theta, self.n_den)
-        return theta
+        return np.insert(np.array(theta.T)[0], 0, 1)
 
     def iterative_weighted_linear_least_squares(self, MAX_ITER=100):
         """
@@ -314,26 +312,23 @@ class SystemIdentification():
             theta = self.linear_least_squares(w=w)
         return theta
 
-    def nonlinear_least_squares(self, is_MLE=True, verbose=True, is_stable=True):
+    def nonlinear_least_squares(self, is_MLE=True, verbose=True, weight=None):
         """
         Maximum Likelihood Estimation if is_MLE = true,
         for more detail, see https://en.wikipedia.org/wiki/Non-linear_least_squares
         Nonlinear Least Square Solution if is_MLE=false
-        :param is_MLE:
-        :param verbose:
-        :param is_stable: always return stable denominator polynominals if True
         :return: <1-D numpy array> of parameter vector theta = [a0, a1, a2, ..., aden, b0, b1, b2, ..., bnum]
         """
         theta_nls_0 = self.iterative_weighted_linear_least_squares()
         c_mle = np.ones(self.nof)
+        if weight is None:
+            weight = np.ones(self.nof)
         if is_MLE:
             # r \to r/\sqrt(2)/\sigma
-            c_mle = [np.sqrt(1 / 2 / self.uy_cov_f[k][self.Y][self.Y])
-                     for k in range(self.nof)]
+            c_mle = np.array([np.sqrt(1 / 2 / self.uy_cov_f[k][self.Y][self.Y])
+                              for k in range(self.nof)]) * weight
 
         def update(theta):
-            if is_stable:
-                theta = stablize_theta(theta, self.n_den)
             r = np.zeros((self.nof, 1), dtype=complex)
             jacob = np.zeros((self.nof, self.nop), dtype=complex)
             for k in range(self.nof):
@@ -356,8 +351,35 @@ class SystemIdentification():
         theta = theta / theta[0]
         return np.array(theta) if theta[0] > 0 else np.array(theta) * -1
 
+    def weight_gen(self, lb, ub, in_range=1, out_of_range=0):
+        """
+        generate weight for frequency weighting
+        :param lb: lower bound of freq [rad/s]
+        :param ub: upper [rad/s]
+        :param in_range: float
+        :param out_of_range: float
+        :return:
+        """
+        weight = np.ones(self.nof)
+        for k, o in enumerate(self.o_lines):
+            if lb <= o < ub:
+                weight[k] = in_range
+            else:
+                weight[k] = out_of_range
+        return np.array(weight)
 
-class SystemIdentificationMIMO():
+    def multi_weight_gen(self, lb=(None,), ub=(None,), in_range=(None,)):
+        assert len(lb) == len(ub)
+        assert len(in_range) == len(ub)
+        weight = np.ones(self.nof)
+        for i in range(len(lb)):
+            for k, o in enumerate(self.o_lines):
+                if lb[i] <= o < ub[i]:
+                    weight[k] = in_range[i]
+        return np.array(weight)
+
+
+class SystemIdentificationMIMO(SystemIdentification):
     U, Y = 0, 1
 
     def __init__(self, siso_list):
@@ -390,7 +412,7 @@ class SystemIdentificationMIMO():
         self.theta_0 = np.array([x if x > 0 else 0 for x in np.append(a, b)])
         self.nop = len(self.theta_0)
 
-    def nonlinear_least_squares(self, is_MLE=True, verbose=True):
+    def nonlinear_least_squares(self, is_MLE=True, verbose=True, weight=None):
         """
         Maximum Likelihood Estimation if is_MLE = true,
         Nonlinear Least Square Solution if is_MLE=false
@@ -399,7 +421,7 @@ class SystemIdentificationMIMO():
         """
         theta_nls_0 = self.theta_0
 
-        def update(theta):
+        def update(theta, weight=weight):
             r = np.zeros((self.nof, 1), dtype=complex)
             jacob = np.zeros((self.nof, self.nop), dtype=complex)
 
@@ -408,10 +430,12 @@ class SystemIdentificationMIMO():
 
             for ix, x in enumerate(self.siso_list):
                 for iy, y in enumerate(x):
+                    if weight is None:
+                        weight = np.ones(y.nof)
                     c_mle = np.ones(y.nof)
                     if is_MLE:
-                        c_mle = [np.sqrt(1 / 2 / y.uy_cov_f[k][self.Y][self.Y])
-                                 for k in range(y.nof)]
+                        c_mle = np.array([np.sqrt(1 / 2 / y.uy_cov_f[k][self.Y][self.Y])
+                                          for k in range(y.nof)]) * weight
 
                     for k in range(y.nof):
                         sum_den = sum(theta[i] * (1.j * y.o_lines[k]) ** i for i in range(self.n_den))
@@ -451,32 +475,6 @@ class SystemIdentificationMIMO():
             theta_list.append(np.append(den, theta[num_offset:num_offset + n]))
             num_offset += n
         return theta_list
-
-
-def stablize_theta(theta, n_den):
-    """
-    Stabilize theta denominator: theta[:n_den]
-    :param theta: [a0, a1, ..., an_den-1, ...]
-    :param n_den:
-    :return:
-    """
-    a, b = theta[:n_den], theta[n_den:]  # denominator, numerator
-    a_stab = apolystab(a)
-    theta = np.array([*a_stab, *b])  # stable plant
-    return theta
-
-
-def apolystab(p):
-    """
-    if p[0] * x**n + p[1] * x**(n-1) + ... + p[n-1]*x + p[n] has unstable poles,
-    stablize all of them, then return stablized cofficients
-    :param p: Rank-1 array of polynomial coefficients.
-    :return:
-    """
-    r = np.roots(p)
-    r_stab = np.array([-x if np.real(x) > 0 else x for x in r])
-    a_stab = np.poly(r_stab)
-    return a_stab
 
 
 def get_path(f_min, f_max, headname="data_frequency_from"):
