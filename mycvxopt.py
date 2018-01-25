@@ -110,7 +110,8 @@ def solve_sdp(c, Gl=None, hl=None, Gsl=[], hsl=[], A=None, b=None):
 
 
 def solve(solver, args, G=None, h=None, A=None, b=None, Gql=[], hql=[], Gsl=[], hsl=[],
-          opt={'abstol': 10 ** -7, "reltol": 10 ** -6, 'feastol': 10 ** -7, 'show_progress':False}, MAX_ITER_SOL=8, verbose=True):
+          opt={'abstol': 10 ** -7, "reltol": 10 ** -6, 'feastol': 10 ** -7, 'show_progress': False}, MAX_ITER_SOL=8,
+          verbose=True):
     """
     Solve various optimization proglems
     :param solver:
@@ -185,6 +186,41 @@ def solve_min_infinity_norm(F, f, G=None, h=None, A=None, b=None, verbose=True):
     if verbose:
         print("Minimized Infinity Norm:", x[0])
     return x[0], x[1:]
+
+
+def solve_min_l1_norm(P, q, G=None, h=None, A=None, b=None, verbose=True):
+    """
+    Transform L1 norm minimization problem:
+    min e.T t = ||Px - q||_1 s.t. Gx<=h, Ax=b into (where ti = ||Pix+qi||_1)
+    min e.T t s.t. Px -q <= t and Px - q >= -t
+    see also https://docs.mosek.com/8.1/toolbox/least-squares.html#the-case-of-the-1-norm .
+    :param P:
+    :param q:
+    :param G:
+    :param h:
+    :param A:
+    :param b:
+    :param verbose:
+    :return:
+    """
+    m, n = P.shape
+    e = np.ones((m, 1))
+    I = np.eye(m)
+    c = np.block([[e], [np.zeros((n, 1))]])
+    G_l1 = np.block([[-I, P], [-I, -P]])
+    h_l1 = np.block([[q], [-q]])
+    if G is not None:
+        G = np.block([[G_l1], [np.zeros((len(G), m)), G]])
+        h = np.block([[h_l1], [h]])
+    else:
+        G = G_l1
+        h = h_l1
+    if A is not None:
+        A = np.block([np.zeros((len(A), m)), A])
+    x = solve("lp", [c], G=G, h=h, A=A, b=b, verbose=verbose)
+    if verbose:
+        print("Minimized L1 Norm:", sum(x[:m]))
+    return x[:m], x[m:]
 
 
 def constraints(G, ub, lb):
