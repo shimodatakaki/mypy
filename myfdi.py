@@ -395,7 +395,7 @@ class SystemIdentificationMIMO():
         self.theta_0 = np.array([x if x > 0 else 0 for x in np.append(a, b)])
         self.nop = len(self.theta_0)
 
-    def nonlinear_least_squares(self, is_MLE=True, verbose=True, weight=None):
+    def nonlinear_least_squares(self, is_MLE=True, verbose=True, weight=None, is_stable=True):
         """
         Maximum Likelihood Estimation if is_MLE = true,
         Nonlinear Least Square Solution if is_MLE=false
@@ -405,6 +405,9 @@ class SystemIdentificationMIMO():
         theta_nls_0 = self.theta_0
 
         def update(theta, weight=weight):
+            if is_stable:
+                theta = stablize_theta(theta, self.n_den)
+
             r = np.zeros((self.nof, 1), dtype=complex)
             jacob = np.zeros((self.nof, self.nop), dtype=complex)
 
