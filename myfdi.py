@@ -314,7 +314,7 @@ class SystemIdentification():
             theta = self.linear_least_squares(w=w)
         return theta
 
-    def nonlinear_least_squares(self, is_MLE=True, verbose=True, is_stable=True):
+    def nonlinear_least_squares(self, is_MLE=True, verbose=True, is_stable=True, weight=None):
         """
         Maximum Likelihood Estimation if is_MLE = true,
         for more detail, see https://en.wikipedia.org/wiki/Non-linear_least_squares
@@ -322,6 +322,7 @@ class SystemIdentification():
         :param is_MLE:
         :param verbose:
         :param is_stable: always return stable denominator polynominals if True
+        :param weight: frequency weighting factor, len(weigh) == self.nof
         :return: <1-D numpy array> of parameter vector theta = [a0, a1, a2, ..., aden, b0, b1, b2, ..., bnum]
         """
         theta_nls_0 = self.iterative_weighted_linear_least_squares()
@@ -330,6 +331,10 @@ class SystemIdentification():
             # r \to r/\sqrt(2)/\sigma
             c_mle = [np.sqrt(1 / 2 / self.uy_cov_f[k][self.Y][self.Y])
                      for k in range(self.nof)]
+        if weight is not None:
+            assert len(weight) == self.nof
+            for i, w in enumerate(weight):
+                c_mle[i] *= w
 
         def update(theta):
             if is_stable:
@@ -390,7 +395,7 @@ class SystemIdentificationMIMO():
         self.theta_0 = np.array([x if x > 0 else 0 for x in np.append(a, b)])
         self.nop = len(self.theta_0)
 
-    def nonlinear_least_squares(self, is_MLE=True, verbose=True):
+    def nonlinear_least_squares(self, is_MLE=True, verbose=True, weight=None):
         """
         Maximum Likelihood Estimation if is_MLE = true,
         Nonlinear Least Square Solution if is_MLE=false
@@ -399,7 +404,7 @@ class SystemIdentificationMIMO():
         """
         theta_nls_0 = self.theta_0
 
-        def update(theta):
+        def update(theta, weight=weight):
             r = np.zeros((self.nof, 1), dtype=complex)
             jacob = np.zeros((self.nof, self.nop), dtype=complex)
 
@@ -412,6 +417,10 @@ class SystemIdentificationMIMO():
                     if is_MLE:
                         c_mle = [np.sqrt(1 / 2 / y.uy_cov_f[k][self.Y][self.Y])
                                  for k in range(y.nof)]
+                    if weight is not None:
+                        assert len(weight) == y.nof
+                        for i, w in enumerate(weight):
+                            c_mle[i] *= w
 
                     for k in range(y.nof):
                         sum_den = sum(theta[i] * (1.j * y.o_lines[k]) ** i for i in range(self.n_den))
