@@ -491,8 +491,10 @@ def apolystab(p):
     """
     r = np.roots(p)
     r_stab = np.array([-x if np.real(x) > 0 else x for x in r])
-    a_stab = np.poly(r_stab)
-    return a_stab
+    if all(x == y for x, y in zip(r, r_stab)):
+        return p
+    p_stab = np.poly(r_stab)
+    return p_stab
 
 
 def get_path(f_min, f_max, headname="data_frequency_from"):
