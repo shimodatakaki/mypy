@@ -371,24 +371,27 @@ class SystemIdentificationMIMO():
         :param siso_list: [ [G11, G12, ..., G1nin], ..., [Gnin,1, ..., Gnout,nin] ]
         transfer function matrix (nin inputs and nout outputs)
         """
-
         self.siso_list = siso_list
-
         self.nin = len(self.siso_list[0])  # number of input
         self.nout = len(self.siso_list)  # number of output
         self.n_den = self.siso_list[0][0].n_den
         self.n_num = []
 
+    def siso_nls(self, is_MLE=True, verbose=True, weight=None, is_stable=True):
+        """
+        Each SISO Identifications
+        :return:
+        """
         den_list, num_list = [], np.array([])
         self.nof = 0
         for x in self.siso_list:
             for y in x:
-                theta_mle = y.nonlinear_least_squares(verbose=True)  # MLE Estimation
+                theta_mle = y.nonlinear_least_squares(is_MLE=is_MLE, verbose=verbose, weight=weight,
+                                                      is_stable=is_stable)  # SISO MLE Estimation
                 den_list.append(theta_mle[:self.n_den])
                 num_list = np.append(num_list, theta_mle[y.n_den:])
                 self.nof += y.nof
                 self.n_num.append(y.n_num)
-
         a = np.mean(den_list, axis=0)  # initial value is avearage of SISO identification
         b = num_list
         # theta = [a_0, a_1, a_2, ..., a_n,theta, b_0, ..., b_m,theta,11, b_0, ..., b_m,theta,nout,nin]
@@ -402,6 +405,7 @@ class SystemIdentificationMIMO():
         :return: <1-D numpy array> of parameter vector theta
          = [a_0, a_1, a_2, ..., a_n,theta, b_0, ..., b_m,theta,11, b_0, ..., b_m,theta,nout,nin]
         """
+        self.siso_nls(is_MLE=is_MLE, verbose=verbose, weight=weight, is_stable=is_stable)  # begin with siso pararmeters
         theta_nls_0 = self.theta_0
 
         def update(theta, weight=weight):

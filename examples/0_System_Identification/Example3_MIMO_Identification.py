@@ -26,13 +26,14 @@ def sys_id():
 
     mimo_id = SystemIdentificationMIMO([[sys_id_11, sys_id_12], [sys_id_21, sys_id_22]])
 
+    theta_mle = mimo_id.nonlinear_least_squares()
+
     print("nin, nout: ", mimo_id.nin, mimo_id.nout)
     print("theta_0:\n", mimo_id.theta_0)
     print("nof: ", mimo_id.nof)
     print("n_den, n_num: ", mimo_id.n_den, mimo_id.n_num)
     print("nop: ", mimo_id.nop)
 
-    theta_mle = mimo_id.nonlinear_least_squares()
     print("theta_mle = ")
     print(theta_mle)
 
