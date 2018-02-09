@@ -121,7 +121,7 @@ class Excitation():
                    header=("Sampling Frequency [Hz]", "Number of iterations []",
                            "Minimum Frequency Resolution [Hz] = 1 / (Excitation Time [s])", "rlog []"))
 
-    def save_to_h(self, input_h=INPUT_H, max_line_number=10):
+    def save_to_h(self, input_h=INPUT_H, max_line_number=10, noi=0):
         """
         save data to header file (.h)
         :param data_path:
@@ -132,6 +132,8 @@ class Excitation():
             for v in (self.fs, self.crest, self.df, self.r):
                 f.write("//" + var_name(v, self.__dict__.items()) + ":" + str(v) + "\n")
             f.write("\n")
+            if noi:
+                f.write("#define NOI " + str(noi) + "\n")
             f.write("#define NROFS " + str(len(self.u)) + "\n")
             f.write("far float refvec[NROFS]={\n")
             write_str = ""
@@ -142,7 +144,7 @@ class Excitation():
                 write_str += str(u) + ", "
                 if i and not i % max_line_number:
                     write_str += "\n"
-            f.write(write_str + "};")
+            f.write(write_str + "};\n")
 
 
 class Simulation():
