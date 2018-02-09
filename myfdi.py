@@ -46,7 +46,7 @@ class Excitation():
         f = f_min
         l_lines = [f // df]  # f_lines = l_lines * df
         while f < f_max:
-            if r>1:
+            if r > 1:
                 f *= r
             else:
                 f += df
@@ -239,7 +239,7 @@ class SystemIdentification():
         self.non = len(self.freq_noise)
         assert len(self.uy_noise_f) == len(self.freq_noise)
 
-    def fap_data(self, var=None):
+    def fap_data(self, var=None, save_name=""):
         """
         return frequecny, amplitude in dB, phase in degrees of signal FRF data or noise
         :param var: if default: return FRF, elif var=="noise": return noise
@@ -254,6 +254,9 @@ class SystemIdentification():
         elif var == "noise":
             freq = self.freq_noise
             gyu = [g[self.Y] / 1 for g in self.uy_noise_f]
+        if save_name:
+            mycsv.save(freq * 2 * np.pi, np.real(gyu), np.imag(gyu), save_name=save_name,
+                       header=("o (rad/s)", "Re", "Im"))
         gain = 20 * np.log10(np.abs(gyu))
         phi = np.angle(gyu, True)  # in degree
         return freq, gain, phi
