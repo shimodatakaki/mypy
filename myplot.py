@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from scipy import signal
 from scipy.fftpack import fft
 
+
 def clear_all():
     """
     clear all figures
@@ -58,14 +59,13 @@ def save(fig, save_name="", leg=None, text=None, formats=("png", "pdf"), title="
             plt.savefig(save_name + "." + f)
 
 
-def phase_bind(phase):
+def phase_bind(phase, MAX=180, MIN=-180):
     """
     limit phase to -180-180 degrees
     :param phase:
     :return:
     """
     ret = []
-    MAX, MIN = 180, -180
     EQ = 360
     for d in phase:
         while d > MAX:
@@ -90,7 +90,6 @@ def bode(fig_num, sys, w=np.array([])):
         w, mag, phase = signal.bode(sys)
     else:
         w, mag, phase = signal.bode(sys, w=w, n=len(w))
-    phase = phase_bind(phase)
     plt.figure(fig_num)
     plt.subplot(211)
     plt.semilogx(w / 2 / np.pi, mag, lw=3)
@@ -98,11 +97,13 @@ def bode(fig_num, sys, w=np.array([])):
     plt.grid(True)
     # plt.axis('tight')
     plt.subplot(212)
+    phase = phase_bind(phase, 0, -360)
     plt.semilogx(w / 2 / np.pi, phase, lw=3)
     plt.ylabel("Phase [deg]")
     plt.xlabel("Frequency [Hz]")
     plt.axis('tight')
     plt.grid(True)
+    plt.ylim(-360, 0)
 
 
 def plot(fig, x, y, lw=3, line_style="-", plotfunc=plt.plot):
@@ -148,8 +149,9 @@ def bodeplot(fig, freq, gain, phi, line_style='-', nos=2, yaxis="dB", xl=None):
     plt.figure(fig)
     if nos < -1 or nos > 1:
         plt.subplot(212)
+        phi = phase_bind(phi, 0, -360)
         plt.semilogx(freq, phi, line_style, lw=3)
-        plt.ylim(-180, 180)
+        plt.ylim(-360, 0)
         plt.xlabel("Frequency [Hz]")
         plt.ylabel("Phase [deg]")
         plt.grid(True)
