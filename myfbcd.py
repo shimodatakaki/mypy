@@ -350,6 +350,19 @@ class ControllerDesign(SuperControllerDesin):
         hl = 0 * np.ones((1, 1))
         self.lcond_append(Gl, hl)
 
+    def pdcond(self, td=50 * 10 ** (-3)):
+        """
+        (5) Kd - taud * Kp < 0
+        :param td:Differenciation Time
+        :return:
+        """
+        Gl = np.zeros((1, self.NOP))
+        Gl[0][2] = 1
+        Gl[0][0] = - td
+        hl = 0 * np.ones((1, 1))
+        self.lcond_append(Gl, hl)
+
+
     def outofdiskcond(self, r, sigma, l=None):
         """
         (x-sigma)**2 + y**2 >= rm**2
