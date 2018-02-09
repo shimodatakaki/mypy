@@ -46,7 +46,10 @@ class Excitation():
         f = f_min
         l_lines = [f // df]  # f_lines = l_lines * df
         while f < f_max:
-            f *= r
+            if r>1:
+                f *= r
+            else:
+                f += df
             if f // df > l_lines[-1]:
                 l_lines.append(f // df)
         l_lines = l_lines[:-1]  # remove f>f_max
