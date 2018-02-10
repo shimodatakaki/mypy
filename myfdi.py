@@ -308,18 +308,20 @@ class SystemIdentification():
         theta = stablize_theta(theta, self.n_den)
         return theta
 
-    def iterative_weighted_linear_least_squares(self, MAX_ITER=100):
+    def iterative_weighted_linear_least_squares(self, MAX_ITER=100, weight=None):
         """
         Iterative Weighted Linear Least Square
         :param MAX_ITER:
+        :param weight:
         :return:
         """
+        if weight is None:
+            weight = np.ones(self.nof)
         theta = self.linear_least_squares()
         for i in range(MAX_ITER):
-            w = []
             for k in range(self.nof):
-                w.append(1 / abs(sum(theta[i] * (1.j * self.o_lines[k]) ** i for i in range(self.n_den))))
-            theta = self.linear_least_squares(w=w)
+                weight[k] *= 1 / abs(sum(theta[i] * (1.j * self.o_lines[k]) ** i for i in range(self.n_den)))
+            theta = self.linear_least_squares(w=weight)
         return theta
 
     def nonlinear_least_squares(self, is_MLE=True, verbose=True, is_stable=True, weight=None):
