@@ -145,6 +145,14 @@ class SuperControllerDesin(object):
         self.C = None
         self.L = None
 
+    def sensitivity(self):
+        """
+        Calculate sensitivity S and complementary sensitivity T
+        :return:
+        """
+        self.S = 1 / (1 + self.L)
+        self.T = 1 - self.S
+
     def split(self, n):
         """
         split data to n parts (into each FRF)
@@ -361,7 +369,6 @@ class ControllerDesign(SuperControllerDesin):
         Gl[0][0] = - td
         hl = 0 * np.ones((1, 1))
         self.lcond_append(Gl, hl)
-
 
     def outofdiskcond(self, r, sigma, l=None):
         """
