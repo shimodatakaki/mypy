@@ -999,6 +999,17 @@ def btaud2pid(b, taud):
     return kp, ki, kd
 
 
+def calc_z(o, ts):
+    """
+    return [z[0], z[1], ..., z[F]] for o[0], ..., o[F}
+    :param o:
+    :param ts:
+    :return:
+    """
+    z = np.exp(1.j * o * ts)
+    return z
+
+
 def calc_sinv(o, ts):
     """
     return [sinv[0], sinv[1], ..., sinv[F]] for o[0], ..., o[F}
