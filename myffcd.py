@@ -40,7 +40,7 @@ class PrefilterDesign(object):
         :return:
         """
         t = self.o_dcsc * self.sinv
-        self.cff = t / (1 + t)
+        self.mff = t / (1 + t)
 
     def second_order(self, zeta=1 / np.sqrt(2)):
         """
@@ -50,7 +50,7 @@ class PrefilterDesign(object):
         """
         t1 = 2 * zeta * self.o_dcsc * self.sinv
         t2 = (self.o_dcsc * self.sinv) ** 2
-        self.cff = t2 / (1 + t1 + t2)
+        self.mff = t2 / (1 + t1 + t2)
 
     def pid_pzc(self, kp, ki, kd, taud):
         """
@@ -66,17 +66,17 @@ class PrefilterDesign(object):
         if kd > 0:
             t1 = (kp + ki * taud) / (kd + taud * kp) * self.sinv
             t2 = ki / (kd + taud * kp) * (self.sinv ** 2)
-            self.cff = t2 / (1 + t1 + t2)
+            self.mff = t2 / (1 + t1 + t2)
         else:
             t = (ki / kp) * self.sinv
-            self.cff = t / (1 + t)
+            self.mff = t / (1 + t)
 
     def filter(self):
         """
         calculate modified T
         :return:
         """
-        self.T_filtered = self.T * self.cff
+        self.T_filtered = self.T * self.mff
 
     def check_T_infinity(self, gamma_max=1.1, T=None):
         """
